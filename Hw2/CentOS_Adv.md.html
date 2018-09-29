@@ -541,7 +541,7 @@ for line in $file_input;do
     ctr=0
     for word in $line;do
         if [ ${word:0:1} = "#" ];then
-            continue
+            break
         fi
         if [ $ctr -eq 0 ];then
             user=u$word
@@ -552,7 +552,7 @@ for line in $file_input;do
         ctr=$[ $ctr+1 ]
     done
 
-    if [ $ctr -le 2 ];then
+    if [ $ctr -ge 2 ];then
         i=`cat /etc/passwd | cut -f1 -d':' | grep -w $user -c`
         if [ $i -ge 1 ];then
             echo ${user} has existed in the system
