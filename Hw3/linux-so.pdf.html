@@ -1,0 +1,222 @@
+<meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
+
+**Linux动态链接库的使用**
+    1651574 贾昊霖*
+
+# Linux下的动态链接库的编译与使用
+
+[学习网址1](http://www.cnblogs.com/skynet/p/3372855.html)
+[学习网址2](https://www.cnblogs.com/fnlingnzb-learner/p/8059251.html)
+
+## 库的概念
+库是写好的现有的，成熟的，可以复用的代码。现实中每个程序都要依赖很多基础的底层库，不可能每个人的代码都从零开始，因此库的存在意义非同寻常。
+本质上来说**库是一种可执行代码的二进制形式**，可以被操作系统载入内存执行。库有两种：静态库（.a、.lib）和动态库（.so、.dll）。
+其中静态、动态是指**链接**
+
+    ![](./pic/dy_st_adv-1-1.png width=500)
+
+## 静态链接库
+### 静态链接库的概念
+在链接阶段，将汇编生成的目标文件.o与引用到的库一起链接打包到可执行文件中。其对应的链接方式称为静态链接。
+因此，既然静态库与汇编生成的目标文件一起链接为可执行文件，那么静态库必定跟.o文件格式相似。其实一个静态库可以简单看成是**一组目标文件（.o/.obj文件）**的集合，即很多目标文件经过压缩打包后形成的一个文件
+
+    ![](./pic/dy_st_adv-1-2.png width=500)
+
+### 静态库的特点
+- 静态库对函数库的链接是放在编译时期完成的。
+- 程序在运行时与函数库再无瓜葛，移植方便。
+- 浪费空间和资源，因为所有相关的目标文件与牵涉到的函数库被链接合成一个可执行文件
+另外静态库对程序的更新、部署和发布页会带来麻烦。如果静态库`liba.lib`更新了，所以使用它的应用程序都需要重新编译、发布给用户（对于玩家来说，可能是一个很小的改动，却导致整个程序重新下载，全量更新）
+
+    ![](./pic/dy_st_adv-1-3.png width=500)
+
+## 动态链接库
+### 动态链接库的概念
+在程序编译时并不被连接到目标代码中，而是在程序运行是才被载入。不同的应用程序如果调用相同的库，那么在内存里只需要有一份该共享库的实例，规避了空间浪费问题。动态库在程序运行是才被载入，也解决了静态库对程序的更新、部署和发布页会带来麻烦。用户只需要更新动态库即可，增量更新
+### 动态库的特点
+- 动态库把对一些库函数的链接载入推迟到程序运行的时期。
+- 可以实现进程之间的资源共享。（因此动态库也称为共享库）
+- 将一些程序升级变得简单。
+- 甚至可以真正做到链接载入完全由程序员在程序代码中控制（显示调用）
+
+    ![](./pic/dy_st_adv-1-4.png width=500)
+
+## 动态链接库实例
+hello.h 头文件
+~~~~~~~~~~~~~~ C++ linenumbers
+#pragma once
+#include <iostream>
+using namespace std;
+void hello();
+~~~~~~~~~~~~~~
+hello.cpp 函数段
+~~~~~~~~~~~~~~ C++ linenumbers
+#include "hello.h"
+void hello(){
+    cout << "Hello World!" << endl;
+}
+~~~~~~~~~~~~~~
+
+test.cpp 主程序
+~~~~~~~~~~~~~~ C++ linenumbers
+#include <iostream>  
+#include "hello.h"
+int main(){  
+    cout << "call function" << endl;
+    hello();  
+}
+
+~~~~~~~~~~~~~~
+- 首先，生成目标文件，此时要加编译器选项`-fPIC` 与链接器选项`-shared`
+~~~~~~~~~~~~~~ bush
+g++ -fPIC -shared -o libhello.so hello.cpp
+~~~~~~~~~~~~~~
+`-fPIC` 创建与地址无关的编译程序（pic，position independent code），是为了能够在多个应用程序间共享
+
+![](./pic/dy_st_adv-2-1.png)
+
+- 然后，引用动态库编译成可执行文件
+~~~~~~~~~~~~~~ bush
+g++ test.cpp -L. -lhello -o test
+~~~~~~~~~~~~~~
+其中:
+`-L` 表示要连接的库所在目录                                                     **## ？？？？还有用么？？？？？？**
+`./`或`.` 表示当前目录
+`-l` 指定链接时需要的动态库，编译器查找动态连接库时有**隐含的命名规则**，即在给出的名字前面加上lib，后面加上.a或.so来确定库的名称。
+
+![](./pic/dy_st_adv-2-2.png)
+发现报错信息，找不到动态链接库
+
+经查询，发现有两种方法可以解决此问题：
+1. 如果安装在`/lib`或者`/usr/lib`下，那么ld默认能够找到，无需其他操作，如果没有，可以手动添加至该目录下
+    因此，可以将生成的动态链接库文件通过指令`cp libhello.so /usr/lib`拷贝值`/usr/lib`目录下，再运行
+2. 如果安装在其他目录，需要将其添加到动态链接`/etc/ld.so.cache`缓存文件中，步骤如下：
+    - 编辑`/etc/ld.so.conf`文件，加入所需库文件所在目录的路径
+    - 运行`ldconfig`，该命令会重建`/etc/ld.so.cache`文件
+本次选择第一种方法：
+
+![](./pic/dy_st_adv-2-3.png)
+成功！
+
+## 写动态链接库测试样例
+
+###  gcc的makefile编写
+`./01/` 中的makefile如下
+~~~~~~~~~~~~~~ makefile linenumbers
+CC = gcc
+SUFFIX = .c
+CFLAGS = -c
+
+test: libtest1.so
+	$(CC) test2$(SUFFIX) -L. -ltest1 -o test
+    # 当然可以加入下面这句话，避免每次都要刷新缓存
+    # ldconfig
+
+libtest1.so: test1$(SUFFIX)
+	$(CC) -fPIC -shared -o libtest1.so test1$(SUFFIX)
+
+clean:
+	rm -f libtest1.so test
+~~~~~~~~~~~~~~
+本次选用第二种错误解决方法
+修改`/etc/ld.so.conf`，并用`idconfig`将`/etc/ld.so.conf`的数据读入高速缓存`/etc/ld.so.cache`中
+
+[](./pic/dy_st_adv-3-2.png)
+其中`/etc/ld.so.conf`修改如下：
+
+[](./pic/dy_st_adv-3-1.png)
+
+### g++的makefile编写
+~~~~~~~~~~~~~~ makefile linenumbers
+DIRS = $(shell find . * -type d | grep -v "\.")
+
+.PHONY = clean test
+
+main: test
+
+test:
+	for dir in $(DIRS);do \
+		make -C $$dir || echo "with no makefile";\
+	done
+
+clean:
+	for dir in $(DIRS);do \
+		make -C $$dir clean || echo "with no makefile"; \
+	done
+~~~~~~~~~~~~~~
+同理只要将`./02/`目录下的`makefile`中`SUFFIX`改为`.cpp`，CC改为`g++` 即可正常运行
+
+![](./pic/dy_st_adv-3-4.png)
+记得还要在`/etc/ld.so.conf`中加入当前路径
+
+    ![](./pic/dy_st_adv-3-3.png)
+
+**注意，同名动态链接库会有冲突！所以这个作业通过老师shell指令在/etc/ld.so.conf 中动态加入**
+老师的改作业程序如下：
+~~~~~~~~~~~~~~ bush linenumbers
+cd /ld.so.conf.d
+rm -f test.conf
+echo "/home/16-010014/1652292" > test.conf
+ldconfig
+~~~~~~~~~~~~~~
+
+
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="markdeep.min.js"></script>
+
+<script src="jquery-3.3.1.min.js"></script>
+
+<script type="text/javascript">
+    $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
+</script>
+
+<style>
+    .md h2::before{
+        content: counter(h2, lower-alpha)
+    }
+
+    .md h2.notinc::before{
+        counter-increment: none;
+        content: none
+    }
+
+    div.notinc1 h1::before{
+        counter-increment: none;
+        content: "2*"
+    }
+
+    .md h1.notinc::before{
+        counter-increment: none;
+    }
+
+    .md .image {
+        width: 80%;
+    }
+
+    .md img {
+        border: 1.3px rgb(0, 0, 0) solid;
+    }
+
+    .md div.imagecaption {
+        text-align: center;
+    }
+
+    .level2 .tocnumber {
+        display: none
+    }
+
+    .md code {
+        background-color: rgba(255, 249, 158, 0.788);
+        color: rgb(145, 52, 40);
+    }
+
+    .md pre code {
+        background: none;
+        /* background-color: rgb(250, 238, 224); */
+        /* border: 1.0px rgb(0, 0, 0) solid; */
+    }
+
+    body {
+        font-family: 等线,Palatino,Georgia,"Times New Roman",serif;
+    }
+</style>

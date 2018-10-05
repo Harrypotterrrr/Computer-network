@@ -138,7 +138,6 @@ clean:
 ![](./pic/zip-2.png)
 
 
-**程序的静态与动态编译**
 # Linux 下的动态编译
 ## 静态编译与动态编译的比较
 - 动态编译：可执行文件需要附带一个的动态链接库，在执行时，需要调用其对应动态链接库中的命令。所以其优点一方面是缩小了执行文件本身的体积，另一方面是加快了编译速度，节省了系统资源。缺点一是哪怕是很简单的程序，只用到了链接库中的一两条命令，也需要附带一个相对庞大的链接库；二是如果其他计算机上没有安装对应的运行库，则用动态编译的可执行文件就不能运行
@@ -187,55 +186,6 @@ yum install glibc-static libstdc++-static
         ![](./pic/dy_st_init-2-2.png)
     - 字节数为1608232
 
-- MariaDB相关cpp的静态编译
-    - 在[Mysql官网](https://dev.mysql.com/downloads/connector/cpp/)下载mysql的链接libmysqlclient，版本为8.0.12
-    下载的压缩包名称为：`mysql-connector-c++-8.0.12-linux-glibc2.12-x86-64bit.tar.gz`
-    - 通过tar -xzvf mysql-connector-c++-8.0.12-linux-glibc2.12-x86-64bit.tar.gz` 解压该压缩包，注意其中z为`.gz`格式
-        ![](./pic/dy_st_init-2-7.png)
-    - 备份之前的mysql目录以及源代码
-        注意**一定要拷贝**，原因是下载的`connector`里不存在`mysql_config`等可执行文件
-        ![](./pic/dy_st_init-2-8.png width=420)
-    - 将压缩包中的对应内容全部拷贝到之前建立的mysql文件夹中
-        ~~~~~~~~~~~~ bush
-        cp -r include/* /usr/include/mysql
-        cp -r lib64/* /usr/lib64/mysql
-        ~~~~~~~~~~~~
-        ![](./pic/dy_st_init-2-9.png)
-        如果遇到覆盖，选择`y`
-    - 观察拷贝结果
-        ![](./pic/dy_st_init-2-10.png)
-        `libmysqlclient.a`为所需的静态链接库文件，观察lib64目录，mysql_config等可执行文件正常
-        （之后可能需要reboot或者restart service）
-    - 进入demo目录，通过下述指令，对`demo.cpp`静态编译`
-    ~~~~~~~~~~~~~ bush
-    g++ -o out2 demo.cpp -static -I/usr/include/mysql -L/usr/lib64/mysql -lmysqlclient -lpthread -ldl
-    ~~~~~~~~~~~~~
-        ![](./pic/dy_st_init-2-11.png)
-        <!-- 编译成功！可观察结果运行正常：
-        ![](./pic/dy_st_init-2-12.png) -->
-
-        
-    - 其中 后三个选项极为重要， `-I/usr/include/mysql`可以替换成在动态编译时用到的`$(mysql_config --cflags)`，
-        而`-L/usr/lib64/mysql -lmysqlclient -lpthread -ldl` 不能替换成`$(mysql_config --libs)` 原因在于，有的库编译器找不到
-        ![](./pic/dy_st_init-2-13.png)
-    <!--     经寻找，发现缺失的`libz.so`,`libssl.so`,`libcrypto.so`均在`/usr/lib64/`目录下
-        ![](./pic/dy_st_init-2-14.png)
-        因此想到将这三个库拷贝到mysql 目录下
-        ![](./pic/dy_st_init-2-15.png)
-
-    - 将上述复杂的静态编译命令修改为下述命令
-    ~~~~~~~~~~~~~ bush
-    g++ -o out2 demo.cpp -static $(mysql_config --cflags --libs)
-    ~~~~~~~~~~~~~
-    发现还是不行我日 -->
-    
-    - 运行out2并与动态编译的可执行文件out对比大小
-        ![](./pic/dy_st_init-2-12.png)
-        均可正常执行，对比大小发现，动态编译的可执行文件大约在10k左右，而静态编译的可执行文件约在10M左右
-
-
-- 
-
 - 编写目录总makefile与上题类似，不再赘述
     最后结果如下图所示
 
@@ -246,6 +196,85 @@ yum install glibc-static libstdc++-static
     ![](./pic/dy_st_init-2-6.png  width=400)
 
 - 压缩方法与上文所述相同，亦不再赘述
+
+
+## MariaDB相关cpp的静态编译
+- 在[Mysql官网](https://dev.mysql.com/downloads/connector/cpp/)下载mysql的链接libmysqlclient，版本为8.0.12
+下载的压缩包名称为：`mysql-connector-c++-8.0.12-linux-glibc2.12-x86-64bit.tar.gz`
+- 通过tar -xzvf mysql-connector-c++-8.0.12-linux-glibc2.12-x86-64bit.tar.gz` 解压该压缩包，注意其中z为`.gz`格式
+
+    ![](./pic/dy_st_init-2-7.png)
+    
+- 备份之前的mysql目录以及源代码
+    注意**一定要拷贝**，原因是下载的`connector`里不存在`mysql_config`等可执行文件
+
+    ![](./pic/dy_st_init-2-8.png width=420)
+
+- 将压缩包中的对应内容全部拷贝到之前建立的mysql文件夹中
+    ~~~~~~~~~~~~ bush
+    cp -r include/* /usr/include/mysql
+    cp -r lib64/* /usr/lib64/mysql
+    ~~~~~~~~~~~~
+    ![](./pic/dy_st_init-2-9.png)
+    如果遇到覆盖，选择`y`
+- 观察拷贝结果
+    ![](./pic/dy_st_init-2-10.png)
+    `libmysqlclient.a`为所需的静态链接库文件，观察lib64目录，mysql_config等可执行文件正常
+    （之后可能需要reboot或者restart service）
+- 进入demo目录，通过下述指令，对`demo.cpp`静态编译`
+~~~~~~~~~~~~~ bush
+g++ -o out2 demo.cpp -static -I/usr/include/mysql -L/usr/lib64/mysql -lmysqlclient -lpthread -ldl
+~~~~~~~~~~~~~
+    ![](./pic/dy_st_init-2-11.png)
+    <!-- 编译成功！可观察结果运行正常：
+    ![](./pic/dy_st_init-2-12.png) -->
+
+    
+- 其中 后三个选项极为重要， `-I/usr/include/mysql`可以替换成在动态编译时用到的`$(mysql_config --cflags)`，
+    而`-L/usr/lib64/mysql -lmysqlclient -lpthread -ldl` 不能替换成`$(mysql_config --libs)` 原因在于，有的库编译器找不到
+    ![](./pic/dy_st_init-2-13.png)
+<!--     经寻找，发现缺失的`libz.so`,`libssl.so`,`libcrypto.so`均在`/usr/lib64/`目录下
+    ![](./pic/dy_st_init-2-14.png)
+    因此想到将这三个库拷贝到mysql 目录下
+    ![](./pic/dy_st_init-2-15.png)
+
+- 将上述复杂的静态编译命令修改为下述命令
+~~~~~~~~~~~~~ bush
+g++ -o out2 demo.cpp -static $(mysql_config --cflags --libs)
+~~~~~~~~~~~~~
+发现还是不行我日 -->
+
+- 运行out2并与动态编译的可执行文件out对比大小
+    ![](./pic/dy_st_init-2-12.png)
+    均可正常执行，对比大小发现，动态编译的可执行文件大约在10k左右，而静态编译的可执行文件约在10M左右
+
+- 检验生成地`out2`为静态可执行文件
+
+    ![](./pic/dy_st_init-2-16.png)
+
+- makefile的编写
+~~~~~~~~~~~ makefile linenumbers
+# s指static，d指dynamic
+CFLAGS_s = -static $$(mysql_config --cflags) -L/usr/lib64/mysql -lmysqlclient -lpthread -ldl
+CFLAGS_d = $$(mysql_config --cflags --libs)
+CC = g++
+FILE = mysql_demo
+
+# 此为静态编译，生成mysql_demo
+$(FILE): $(FILE).cpp
+        $(CC) -o $(FILE) $(FILE).cpp $(CFLAGS_s)
+
+.PHONY = clean $(FILE)_d
+
+# 此为动态编译，生成mysql_demo_d
+$(FILE)_d: $(FILE).cpp
+        $(CC) -o $(FILE)_d $(FILE).cpp $(CFLAGS_d)
+
+clean:
+        rm -f $(FILE) $(FILE)_d
+~~~~~~~~~~
+注意这里多加了一个伪目标 便于生成动态与静态可执行文件，运行完全正确！  
+![](./pic/dy_st_init-2-17.png)
 
 
 
@@ -259,14 +288,14 @@ yum install glibc-static libstdc++-static
 本质上来说**库是一种可执行代码的二进制形式**，可以被操作系统载入内存执行。库有两种：静态库（.a、.lib）和动态库（.so、.dll）。
 其中静态、动态是指**链接**
 
-    ![](./pic/dy_st_adv-1-1.png)
+    ![](./pic/dy_st_adv-1-1.png width=500)
 
 ## 静态链接库
 ### 静态链接库的概念
 在链接阶段，将汇编生成的目标文件.o与引用到的库一起链接打包到可执行文件中。其对应的链接方式称为静态链接。
 因此，既然静态库与汇编生成的目标文件一起链接为可执行文件，那么静态库必定跟.o文件格式相似。其实一个静态库可以简单看成是**一组目标文件（.o/.obj文件）**的集合，即很多目标文件经过压缩打包后形成的一个文件
 
-    ![](./pic/dy_st_adv-1-2.png)
+    ![](./pic/dy_st_adv-1-2.png width=500)
 
 ### 静态库的特点
 - 静态库对函数库的链接是放在编译时期完成的。
@@ -274,7 +303,7 @@ yum install glibc-static libstdc++-static
 - 浪费空间和资源，因为所有相关的目标文件与牵涉到的函数库被链接合成一个可执行文件
 另外静态库对程序的更新、部署和发布页会带来麻烦。如果静态库`liba.lib`更新了，所以使用它的应用程序都需要重新编译、发布给用户（对于玩家来说，可能是一个很小的改动，却导致整个程序重新下载，全量更新）
 
-    ![](./pic/dy_st_adv-1-3.png)
+    ![](./pic/dy_st_adv-1-3.png width=500)
 
 ## 动态链接库
 ### 动态链接库的概念
@@ -285,7 +314,7 @@ yum install glibc-static libstdc++-static
 - 将一些程序升级变得简单。
 - 甚至可以真正做到链接载入完全由程序员在程序代码中控制（显示调用）
 
-    ![](./pic/dy_st_adv-1-4.png)
+    ![](./pic/dy_st_adv-1-4.png width=500)
 
 ## 动态链接库实例
 hello.h 头文件

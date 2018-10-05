@@ -1,0 +1,197 @@
+<meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
+
+**Makefile 文件作用及编写方法**
+    1651574 贾昊霖*
+
+
+# Makefile 文件作用
+makefile文件本质目的是实现自动化编译，其作用在于可以使程序员只通过一个命令完成整个工程的编译、链接以至于最后的执行操作
+
+# Makefile 基本语法
+
+## Makefile 的包含
+### 指定makefile文件
+通常为`makefile` 或 `Makefile`，如其他名称，则用一下命令
+~~~~~~~~~~~~~~ bush
+make -f filename.xxx
+~~~~~~~~~~~~~~
+### 包含其他文件
+~~~~~~~~~~~~~~ bush
+include /home/admin/*.mk
+# 或者再输入命令时添加，默认makefile/Makefile
+make --include-dir /home/admin
+~~~~~~~~~~~~~~
+这个会类似于C语言，把文件内容复制到当前位置
+
+## 书写规则
+### 调用格式
+~~~~~~~~~~~~~~ bush
+targets : prerequisites
+    command \
+    command # started with \t
+    ...
+~~~~~~~~~~~~~~
+target更新规则：
+1. 目标文件没有生成
+2. 某个prerequisite中的文件修改时间比target文件晚
+3. 某个条件中的文件需要更新
+
+### 隐式规则
+make工具会自动使用`g++ -c`命令，将扩展名为`.c`的文件编译成一个同名的`.o`目标文件
+因此
+~~~~~~~~~~~~~~ makefile linenumbers
+test: main.o
+    g++ -o test main.o
+main.o: main.c main.h
+    g++ -c main.c
+clean:
+    rm test *.o
+~~~~~~~~~~~~~~
+可简化成
+~~~~~~~~~~~~~~ makefile linenumbers
+test: main.o
+    g++ -o test main.o
+main.o: main.h
+clean:
+    rm test *.o
+~~~~~~~~~~~~~~
+
+### 使用伪目标
+例如上例的clean,就是一个伪目标，make指令并不生成clean这个目标文件，并且无法生成其依赖关系，也无法决定该目标是否需要执行。
+因此只有通过显式地指明这个目标才能对其进行执行
+~~~~~~~~~~~~~~ bush
+make clean
+~~~~~~~~~~~~~~
+为了避免和文件名冲突，使用特殊标记`.PHONY`来显式指明一个目标是伪目标，例如
+~~~~~~~~~~~~~~ bush
+.PHONY : clean
+~~~~~~~~~~~~~~
+**注意，makefile文件中的第1个目标会被作为默认目标**
+
+### 使用Shell命令
+使用`@`字符在命令行前，这个命令将不被make命令显示出来，例如
+~~~~~~~~~~~~~~ bush
+@echo compiling...
+~~~~~~~~~~~~~~
+输出为
+~~~~~~~~~~~~~~ bush
+`compiling...`
+~~~~~~~~~~~~~~
+否则如果这样
+~~~~~~~~~~~~~~ bush
+echo compiling...
+~~~~~~~~~~~~~~
+输出则会变成
+~~~~~~~~~~~~~~ bush
+echo compiling...
+compiling...
+~~~~~~~~~~~~~~
+此外，`make -n`可以只是显示命令，但不会执行命令。`make -s`则不现实命令提示，无论前面是否有`@`符
+
+## 使用变量
+引用变量时，在变量名前加`$`符号，`$(Variable)`
+### 变量定义
+- `=`左侧变量，右侧变量地值
+- `:=` 避免递归定义的危险，同`=`
+- `?=`类似于C++中的`ifndef`
+### 追加变量的值
+`+=` 类似于`strcat()`函数，或者通过` variable1 = $(variable2) $(variable3)` 的方式
+
+
+# makefile实例
+递归向下寻找所有该路径下的文件夹中的makefile文件，并执行make指令
+~~~~~~~~~~~~~~ makefile linenumbers
+CC = g++
+CFLAGS = -c
+DIRS = $(shell find . * -type d | grep -v "\.")
+
+.PHONY = clean test
+
+main: test
+
+test:
+	for dir in $(DIRS);do \
+		make -C $$dir || echo "with no makefile";\
+	done
+
+clean:
+	for dir in $(DIRS);do \
+		make -C $$dir clean || echo "with no makefile"; \
+	done
+~~~~~~~~~~~~~~
+其中 `make -C` 可以指定目录执行make指令，`find . * -type d`将当前目录下的所有子目录找到，`grep -v "\."`为反转寻找，即寻找不含`'.'`的目录
+
+# 压缩与解压缩
+## 压缩归档
+`tar -cvjf 目标文件 源文件`
+- `c`为`tar`的功能，创建一个新的`tar`归档文件
+- `vjf`为`tar`的选项
+    - `j` 重定向给bzip2命令压缩文件
+    - `v` 在处理文件时显示文件
+    - `f` 将输出结果到文件或设备`file`
+
+![](./pic/zip-1.png)
+## 解压缩提取
+`tar -xvjf 目标文件 源文件`
+- `x`为`tar`的功能，从已有的`tar`归档文件中提取
+
+![](./pic/zip-2.png)
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="markdeep.min.js"></script>
+
+<script src="jquery-3.3.1.min.js"></script>
+
+<script type="text/javascript">
+    $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
+</script>
+
+<style>
+    .md h2::before{
+        content: counter(h2, lower-alpha)
+    }
+
+    .md h2.notinc::before{
+        counter-increment: none;
+        content: none
+    }
+
+    div.notinc1 h1::before{
+        counter-increment: none;
+        content: "2*"
+    }
+
+    .md h1.notinc::before{
+        counter-increment: none;
+    }
+
+    .md .image {
+        width: 80%;
+    }
+
+    .md img {
+        border: 1.3px rgb(0, 0, 0) solid;
+    }
+
+    .md div.imagecaption {
+        text-align: center;
+    }
+
+    .level2 .tocnumber {
+        display: none
+    }
+
+    .md code {
+        background-color: rgba(255, 249, 158, 0.788);
+        color: rgb(145, 52, 40);
+    }
+
+    .md pre code {
+        background: none;
+        /* background-color: rgb(250, 238, 224); */
+        /* border: 1.0px rgb(0, 0, 0) solid; */
+    }
+
+    body {
+        font-family: 等线,Palatino,Georgia,"Times New Roman",serif;
+    }
+</style>
