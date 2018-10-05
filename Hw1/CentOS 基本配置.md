@@ -215,6 +215,8 @@ systemctl stop mariadb.service
 
         输入`g++ $(mysql\_config --cflags) demo.cpp $(mysql\_config --libs) -o out` 指令，编译
         ![](./pic/image044.png)
+        `-I`为编译程序按照-I指定的路进去搜索头文件  
+        `-L`为编译程序按照-L指定的路进去寻找库文件
 
         运行 out，得到最终结果
         ![](./pic/image045.png)
