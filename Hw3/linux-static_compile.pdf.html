@@ -1,7 +1,7 @@
 <meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
 
 **Linux下的静态编译**
-    1651574 贾昊霖*
+    1651574 贾昊霖
 
 # Linux 下的动态编译
 ## 静态编译与动态编译的比较
@@ -110,6 +110,7 @@ g++ -o out2 demo.cpp -static $(mysql_config --cflags --libs)
 发现还是不行我日 -->
 
 - 运行out2并与动态编译的可执行文件out对比大小
+
     ![](./pic/dy_st_init-2-12.png)
     均可正常执行，对比大小发现，动态编译的可执行文件大约在10k左右，而静态编译的可执行文件约在10M左右
 
@@ -151,7 +152,7 @@ clean:
 </script>
 
 <style>
-    .md h2::before{
+    /* .md h2::before{
         content: counter(h2, lower-alpha)
     }
 
@@ -167,7 +168,7 @@ clean:
 
     .md h1.notinc::before{
         counter-increment: none;
-    }
+    } */
 
     .md .image {
         width: 80%;
@@ -181,9 +182,9 @@ clean:
         text-align: center;
     }
 
-    .level2 .tocnumber {
+    /* .level2 .tocnumber {
         display: none
-    }
+    } */
 
     .md code {
         background-color: rgba(255, 249, 158, 0.788);

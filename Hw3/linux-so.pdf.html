@@ -1,7 +1,7 @@
 <meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
 
 **Linux动态链接库的使用**
-    1651574 贾昊霖*
+    1651574 贾昊霖
 
 # Linux下的动态链接库的编译与使用
 
@@ -121,10 +121,11 @@ clean:
 本次选用第二种错误解决方法
 修改`/etc/ld.so.conf`，并用`idconfig`将`/etc/ld.so.conf`的数据读入高速缓存`/etc/ld.so.cache`中
 
-[](./pic/dy_st_adv-3-2.png)
+![](./pic/dy_st_adv-3-2.png width=450)
+
 其中`/etc/ld.so.conf`修改如下：
 
-[](./pic/dy_st_adv-3-1.png)
+![](./pic/dy_st_adv-3-1.png width=350)
 
 ### g++的makefile编写
 ~~~~~~~~~~~~~~ makefile linenumbers
@@ -171,7 +172,7 @@ ldconfig
 </script>
 
 <style>
-    .md h2::before{
+    /* .md h2::before{
         content: counter(h2, lower-alpha)
     }
 
@@ -187,7 +188,7 @@ ldconfig
 
     .md h1.notinc::before{
         counter-increment: none;
-    }
+    } */
 
     .md .image {
         width: 80%;
@@ -201,9 +202,9 @@ ldconfig
         text-align: center;
     }
 
-    .level2 .tocnumber {
+    /* .level2 .tocnumber {
         display: none
-    }
+    } */
 
     .md code {
         background-color: rgba(255, 249, 158, 0.788);
