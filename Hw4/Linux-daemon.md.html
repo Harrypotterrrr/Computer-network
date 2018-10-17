@@ -64,20 +64,20 @@ j               |   查看当前
 在另一控制台终端查看某进程及其父进程，用`ps -p 子进程号 -l`
 ![](./pic/1-4.png)
 
-使test1-1,test1-2在后台运行，通过`CTRL+D`退出控制台登陆
+使test1-1,test1-2在后台运行，通过`CTRL+D`退出
 ![](./pic/1-6.png)
 
 在另一个控制台查看，发现该进程已结束
 ![](./pic/1-7.png)
 
-再次使test1-1,test1-2在后台运行，通过`exit`或者`logout`退出控制台登陆
+再次使test1-1,test1-2在后台运行，通过`exit`或者`logout`退出
 ![](./pic/1-9.png)
 
 再在另一个控制台查看，可观察到进程没有结束，只是状态变为了T
 ![](./pic/1-10.png)
 
 !!! Tip
-    Linux process的状态：
+    Linux process的STAT状态：
     R (TASK_RUNNING)，可执行状态。
     S (TASK_INTERRUPTIBLE)，可中断的睡眠状态。
     T (TASK_STOPPED or TASK_TRACED)，暂停状态或跟踪状态。
@@ -85,10 +85,15 @@ j               |   查看当前
     Z (TASK_DEAD - EXIT_ZOMBIE)，退出状态，进程成为僵尸进程。
     X (TASK_DEAD - EXIT_DEAD)，退出状态，进程即将被销毁。
 
+下文来自冯舜的总结，整理如下：
 !!! WARNING
-    bash终端下, 
-    Ctrl-D 字符表示输入流完毕 (EOF), 会让 bash 遵循正常流程退出 (若不多加设置忽略 EOF).
-    而 exit 和 logout 同样会使 bash 正常退出. 此时, 该 bash 启动的后台运行作业不会退出 (但后台挂起作业会退出), 而是作为孤儿进程被 init (1 号进程) 接纳作为子进程.
+    
+    1. bash终端下,Ctrl-D 字符表示输入流完毕 (EOF), 会让 bash 遵循正常流程退出 (若不多加设置忽略 EOF).
+    
+    2. exit 和 logout 同样会使 bash 正常退出. 此时, 该 bash 启动的后台运行作业不会退出 (但后台挂起作业会退出), 而是作为孤儿进程被 init (1 号进程) 接纳作为子进程.
+
+    3. 点击 SSH 窗口或 Linux 桌面环境下 Terminal 窗口的 “X” 键退出, 则会向 bash 送一个 SIGHUP 信号, bash 收到后也会向它管理的所有作业发出 SIGHUP 信号(除非该作业用 disown -h %1 排除出 SIGHUP 信号管理列表). 收到 SIGHUP 信号的进程, 默认终止.
+    故包括后台运行进程在内的作业都会被终止.
 
 ![](./pic/1-11.png)
 
@@ -203,6 +208,7 @@ int main() {
 
 #### 手写守护进程
 守护进程的创建流程：
+
 1. 创建子进程，父进程退出——脱离控制终端
     创建子进程之后父进程退出，会造成子进程没有父进程，从而使子进程变成一个孤儿进程（因此子进程不会随着父进程退出而退出），即子进程会被init 1号进程领养，因此init进程将成为该子进程的父进程
     在Linux中，每当系统发现一个孤儿进程，就会自动由1号进程（也就是init进程）收养它，这样，原先的子进程就会变成init进程的子进程了
@@ -269,7 +275,7 @@ if (getrlimit(RLIMIT_NOFILE, &rl) == -1)
     ERROR_EXIT("getrlimit failed!");
 nfiles = rl.rlim_cur = rl.rlim_max;
 setrlimit(RLIMIT_NOFILE, &rl);
-for(i=3; i<nfiles; i++)
+for(i=3; i < nfiles; i++)
     close(i);
 #endif
 ~~~~~~~~~~~
@@ -280,7 +286,7 @@ for(i=3; i<nfiles; i++)
 /* 重定向标准的3个文件描述符 */
 if(fd = open("/dev/null", O_RDWR) < 0)
     ERROR_EXIT("open /dev/null failed!");
-for(i=0; i<3; i++)
+for(i=0; i < 3; i++)
     dup2(fd, i);
 ~~~~~~~~~~~
 
@@ -353,7 +359,7 @@ void myDaemonize()
         printf("getrlimit failed!");
     nfiles = rl.rlim_cur = rl.rlim_max;
     setrlimit(RLIMIT_NOFILE, &rl);
-    for ( i=3; i < nfiles; i++)
+    for(i=3; i < nfiles; i++)
         close(i);
 #endif
 
@@ -380,23 +386,33 @@ int main()
 
 ### 查看 test2 进程标识和父进程标识
 尝试用 jobs 查看后台作业列表, 但没有得到输出, 说明两个守护进程已经不受本终端控制
+
 ![](./pic/2-3.png)
 
 使用`ps l -C 可执行文件名` 查询进程， 观察到进程PID=2016, 父进程PPID=1, 已经成为孤儿进程，被init进程(CentOS中为`systemd`)接管为子进程
+
 ![](./pic/2-4.png)
 
 与普通进程对比，在本命令行运行test1-2,输出"贾昊霖"
+
 ![](./pic/2-5.png)
+
 打开另一个命令行，通过ps l命令查看
+
 ![](./pic/2-6.png)
+
 可以观察到可以查询到当前test1-2的进程，但是守护进程test2并没有
 
 由于守护进程是全局的，与控制台无关，故另一个控制太太同样可以用`ps l -C 可执行文件名` 查看进程信息
+
 ![](./pic/2-7.png)
+
 `TTY`一栏显示为`?`,表示不属于任何终端
 
 通过`CTRL+D` 退出后，再另一命令行中观察 test2与test1-2
+
 ![](./pic/2-8.png)
+
 发现state均为 stop，但是守护进程的flag为1
 
 <!-- 为了将test2重新打印在新终端上，需要安装`reptyr`服务,从[CentOS package官网](https://centos.pkgs.org/7/epel-x86_64/reptyr-0.5-1.el7.x86_64.rpm.html) 下载适合
@@ -469,6 +485,7 @@ int main()
 }
 ~~~~~~~~~~~~~
 正确输出
+
 ![](./pic/3-1.png)
 
 ## 子进程与守护进程关系
@@ -476,6 +493,7 @@ int main()
 **也可通过 ps f l -C test3-1**命令查看，有较小的区别
 
 ![](./pic/3-2.png)
+
 结果表明 2471号进程为父进程
 
 ## 僵尸进程
@@ -563,7 +581,9 @@ int main()
 }
 ~~~~~~~~~~~~~
 观察结果
+
 ![](./pic/3-6.png)
+
 在子进程运行结束后，由于父进程忽略了SIGCHLD信号，由init负责wait清理运行结束的子进程，因此后台没有僵尸进程
 
 # 守护进程及其子进程的处理
@@ -755,8 +775,18 @@ int main()
 }
 ~~~~~~~~~~
 运行结果如下
+
 ![](./pic/4-4.png)
+
 杀死父进程的时候，所有子进程也成功杀死
+
+注意在子进程中加入下述信号控制代码很重要，原因在于防止递归监听信号：
+~~~~~~ C++
+signal(SIGCHLD, SIG_DFL);
+signal(SIGTERM, SIG_DFL);
+signal(SIGINT, SIG_DFL);
+signal(SIGHUP, SIG_DFL);
+~~~~~~
 
 - 方法2：
 在子进程中加入`prctl(PR_SET_PDEATHSIG, SIGTERM)`，使系统在父进程死亡时，向所有子进程发送`SIGTERM`以终止他们
@@ -840,8 +870,12 @@ int main()
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <linux/random.h>
+#include <sys/syscall.h>
 #include <fcntl.h>
+#include <sys/prctl.h>
+#include <linux/random.h>
+#include <errno.h>
+#include <sys/wait.h>
 
 #define str_len 1024
 
@@ -850,6 +884,7 @@ void killAll(int sig)
     // if (sig != SIGTERM && sig != SIGINT && sig != SIGUP)
     //     return;
 
+    prctl(PR_SET_PDEATHSIG, SIGTERM);
     if(kill(0, SIGTERM) == -1)
         exit(EXIT_FAILURE);
     exit(EXIT_SUCCESS);
@@ -905,15 +940,261 @@ int main(int argc, char **argv)
 
 ## 实验步骤
 
+### 基础极限测试
 首先将虚拟机分别设置512MB，1024MB，2048MB
+
 ![](./pic/5-1.png)
 
 运行程序，在512MB，1024MB，2048MB运行结果分别如下
 
 ![](./pic/5-2.png) ![](./pic/5-3.png) ![](./pic/5-4.png) 
 
-<!-Markdeep: -->
-<style class="fallback">body{visibility:hidden}</style><script src="markdeep.min.js"></script>
+### 将申请内存扩大的极限测试
+将#define str_len 1024 改为#define str_len 10240， 重新进行测试
+
+![](./pic/5-2.png) ![](./pic/5-3.png) ![](./pic/5-4.png) 
+
+每个进程申请的空间扩大十倍，但发现可建立的子进程数量几乎没有变化，因此系统允许最大进程数仅与内存大小无关
+
+### 等待极限测试
+由于系统允许最大进程数有限制，因此利用其他程序结束后再分裂的策略，使能分类更多的子进程
+因此，当尝试申请进程失败时，不直接exit错误代码，而是等待wait()后，再次尝试申请
+
+wait()函数：进程一旦调用了 wait，就立即阻塞自己，由wait自动分析是否当前进程的某个子进程已经退出，如果让它找到了这样一个已经变成僵尸的子进程，wait 就会收集这个子进程的信息， 并把它彻底销毁后返回；如果没有找到这样一个子进程，wait就会一直阻塞在这里，直到有一个出现为止
+~~~~~~~~ C++
+#include<sys/types.h>
+#include<sys/wait.h>
+pid_t wait (int * status);
+~~~~~~~~
+wait()会暂时停止目前进程的执行，直到有信号来到或子进程结束。如果在调用wait()时子进程已经结束，则wait()会立即返回子进程结束状态值。
+**子进程的结束状态值**会由参数**status**返回，而子进程PID也会一并返回。如果不在意结束状态值，则参数status 可以设成NULL
+返回：如果执行成功则返回子进程PID，如果有错误发生则返回-1。失败原因存于errno 中。
+
+**注意本题子进程睡眠20s太坑..改成2s节约时间 = =**
+代码：
+~~~~~~~~~ C++
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <fcntl.h>
+#include <sys/prctl.h>
+#include <linux/random.h>
+#include <errno.h>
+#include <sys/wait.h>
+
+#define str_len 1024
+
+void killAll(int sig)
+{
+    prctl(PR_SET_PDEATHSIG, SIGTERM);
+    if(kill(0, SIGTERM) == -1)
+        exit(EXIT_FAILURE);
+    exit(EXIT_SUCCESS);
+}
+
+void childProcess()
+{
+    char tmp_str[str_len];
+    int i = 0;
+    for(i = 0 ; i < str_len;i++)
+        tmp_str[i] = (char)(rand()%255);
+
+    sleep(2);
+}
+
+int main(int argc, char **argv)
+{
+    if(argc != 2){
+        printf("请输入一个参数表示循环次数\n");
+        exit(-1);
+    }
+
+    signal(SIGCHLD, SIG_IGN);
+    pid_t pid, ppid;
+    int k = atoi(argv[1]), i;
+    int status, max_pid = -1;
+
+
+    for (i = 0 ; i < k ; i++) {
+        pid = fork();
+        if (pid < 0) {
+
+            printf("父进程分裂失败，尝试等待后再次申请进程!\n");
+            wait(&status);
+            i --;
+            continue;
+        }
+        if (pid == 0) {
+            childProcess();
+
+            exit(EXIT_SUCCESS);
+        }
+
+        max_pid = max_pid > pid ? max_pid : pid;
+        
+        if(i % 100 == 0)
+            printf("已分裂%d个子进程，当前最大pid为%d\n", i, max_pid);
+    }
+
+    printf("总计分裂了 %d 个子进程\n", i);
+
+    while(1)
+        sleep(1000);
+
+    return 0;
+}
+~~~~~~~~~
+查看结果，设置内存仅为512MB时，通过等待结束——分配策略，成功申请100000个子进程
+![](./pic/5-5.png)
+通过`ps l f -C test5-2` 查看最后仅剩 父进程
+![](./pic/5-6.png)
+
+## 守护进程回收子进程并计数
+waitpid()函数
+~~~~~~~~~ C++
+#include <sys/types.h> /* 提供类型pid_t的定义 */
+#include <sys/wait.h>
+pid_t waitpid(pid_t pid,int *status,int options)
+~~~~~~~~~
+- pid参数：
+    - pid > 0: 只等待进程ID等于pid的子进程，不管其它已经有多少子进程运行结束退出了，只要指定的子进程还没有结束，waitpid就会一直等下去
+    - pid = -1: 等待任何一个子进程退出，没有任何限制，此时waitpid和wait的作用一模一样。
+    - pid = 0: 等待同一个进程组中的任何子进程，如果子进程已经加入了别的进程组，waitpid不会对它做任何理睬。
+    - pid < -1: 等待一个指定进程组中的任何子进程，这个进程组的ID等于pid的绝对值。
+- options参数：目前在Linux中只支持WNOHANG, 表示没有子进程退出，它也会立即返回，不会像wait那样永远等下去
+- 返回值：
+    - 当正常返回的时候，waitpid返回收集到的子进程的进程ID
+    - 如果设置了选项WNOHANG，而调用中waitpid发现没有已退出的子进程可收集，则返回0
+    - 如果调用中出错，则返回-1，这时errno会被设置成相应的值以指示错误所在
+
+## 代码
+~~~~~~~~~~~ C++
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <fcntl.h>
+#include <sys/prctl.h>
+#include <linux/random.h>
+#include <errno.h>
+#include <sys/wait.h>
+
+#define str_len 1024
+
+int ctr_rqt,ctr_rcy, ctr_p;
+int max_pid = -1;
+int father_pid;
+
+void printResult(int sig)
+{
+    if(getpid() == father_pid){
+        printf("~~~~~~~~~~~~~~~~~~~~~~\n");
+        printf("总计分裂了 %d 个子进程\n", ctr_p);
+        printf("最大pid为%d\n",max_pid);
+        printf("申请数为: %d, 回收数为: %d\n", ctr_rqt, ctr_rcy);
+        printf("~~~~~~~~~~~~~~~~~~~~~~\n");
+        exit(EXIT_SUCCESS);
+    }
+}
+
+void childProcess()
+{
+    // signal(SIGCHLD, SIG_DFL);
+    // signal(SIGTERM, SIG_DFL);
+    // signal(SIGINT, SIG_DFL);
+    // signal(SIGHUP, SIG_DFL);
+    char tmp_str[str_len];
+    int i = 0;
+    for(i = 0 ; i < str_len;i++)
+        tmp_str[i] = (char)(rand()%255);
+
+    sleep(10);
+}
+
+void recycleCount(int sig)
+{
+    int status;
+    while(1){
+        if(waitpid(-1,&status, WNOHANG) > 0)
+            ctr_rcy++;
+        else
+            break;
+    }
+}
+
+int main(int argc, char **argv)
+{
+    if(argc != 2){
+        printf("请输入一个参数表示循环次数\n");
+        exit(-1);
+    }
+
+    signal(SIGCHLD, &recycleCount);
+    signal(SIGINT, &printResult);
+
+    father_pid = getpid();
+    pid_t pid, ppid;
+
+    int k = atoi(argv[1]);
+    int status;
+
+
+    for (ctr_p = 0 ; ctr_p < k ; ctr_p++) {
+        pid = fork();
+        if (pid < 0) {
+            printf("父进程分裂失败，尝试等待后再次申请进程!\n");
+            sleep(5);
+            ctr_p --;
+            continue;
+        }
+        if (pid == 0) {
+            childProcess();
+            exit(EXIT_SUCCESS);
+        }
+
+        ctr_rqt ++;
+        max_pid = max_pid > pid ? max_pid : pid;
+        
+        if(ctr_p % 100 == 0)
+            printf("已分裂%d个子进程，当前最大pid为%d，当前申请%d个进程，回收%d个进程\n", ctr_p, max_pid, ctr_rqt, ctr_rcy);
+    }
+
+    // wait the sub process to end
+    while(1)
+        if(ctr_rcy==ctr_rqt)
+ 			break;
+
+    printResult(0);
+    return 0;
+}
+~~~~~~~~~~~
+![](./pic/5-7.png)
+
+如图所示，申请内存数与释放内存数相同
+程序说明：
+
+- 子程序段childProcess中，一下代码并不能很好的阻止signal递归调用
+~~~~~~~~~~~~~~ C++
+signal(SIGCHLD, SIG_DFL);
+signal(SIGTERM, SIG_DFL);
+signal(SIGINT, SIG_DFL);
+signal(SIGHUP, SIG_DFL);
+~~~~~~~~~~~~~~
+原因是父程序在fork()出一个子程序后，若在执行上述signal信号设置之前，有CTRL+C的中断命令使其他子程序停止，则当前最先fork()出的子程序仍然会监听信号
+因此最好的解决办法为在监听interupt的程序中加入，判断是否为父进程的ip 
+
+- waitpid(-1,xxxx,xxx)的机理类似于wait，因此直到接收一个SIGCHLD信号，才会执行下面的语句，而等待信号阶段成为阻塞态，**注意!**执行signal()函数的并非父进程也非子进程，应该为system系统中的某个进程执行，此外程序中出现的`while(1)`可以认为是一种默认，避免了大量SIGCHLD信号不被忽略而没有被系统接收到的一种做法
+
+
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="markdeep.min.js"></script>
 
 <script src="jquery-3.3.1.min.js"></script>
 
