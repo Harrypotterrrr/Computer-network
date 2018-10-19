@@ -172,6 +172,8 @@ Linux Daemon（守护进程）是运行在后台的一种特殊进程。它独�
 
 #### 利用轮子来创建守护进程
 守护进程可以通过系统函数daemon()来创建，但此方法不能弄清楚守护进程创建的规则，因此不推荐
+
+<script type="preformatted">
 ~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -205,6 +207,7 @@ int main() {
     return 0;
 }
 ~~~~~~~~~
+</script>
 
 #### 手写守护进程
 守护进程的创建流程：
@@ -212,6 +215,8 @@ int main() {
 1. 创建子进程，父进程退出——脱离控制终端
     创建子进程之后父进程退出，会造成子进程没有父进程，从而使子进程变成一个孤儿进程（因此子进程不会随着父进程退出而退出），即子进程会被init 1号进程领养，因此init进程将成为该子进程的父进程
     在Linux中，每当系统发现一个孤儿进程，就会自动由1号进程（也就是init进程）收养它，这样，原先的子进程就会变成init进程的子进程了
+
+<script type="preformatted">
 ~~~~~~~~~ C++
 // 父进程获得到的 PID 小于 0, 未创建成功
 if (pid < 0) {
@@ -224,19 +229,27 @@ else if (pid > 0) {
     exit(EXIT_SUCCESS);
 }
 ~~~~~~~~~
-注意fork()函数调用一次，会返回两次，
-    1）在父进程中，fork返回新创建子进程的进程ID；
-    2）在子进程中，fork返回0；
-    3）出现错误，返回负值
+</script>
+
+    
+    注意fork()函数调用一次，会返回两次，
+    
+    - 在父进程中，fork返回新创建子进程的进程ID；
+    - 在子进程中，fork返回0；
+    - 出现错误，返回负值
 
 2. 在子进程中创建新会话——脱离父进程的会话组和进程组
     调用setsid函数的进程成为新的会话的首进程，并与其父进程的会话组和进程组脱离，成为新的 session leader 和进程组 leader 
+
+<script type="preformatted">
 ~~~~~~~~~ C++
 if(setsid() < 0) {
     printf("无法使子进程成为 SESSION LEADER!\n");
     exit(EXIT_FAILURE);
 }
 ~~~~~~~~~
+</script>
+
 !!!    
     在调用fork()函数时，子进程全盘复制了父进程的会话期、进程组和控制终端等，虽然父进程退出了，但原先的会话期、进程组和控制终端等并没有改变，因此，还不是真正意义上的独立，而setsid()函数能够使进程完全独立出来，从而脱离所有其他进程的控制，成为一个后台进程
 
@@ -244,6 +257,8 @@ if(setsid() < 0) {
 本步骤很关键。
 **it is possible for the child to regain control of the terminal, but once it has lost control the forked grandchild cannot do this. **
 现在，进程已经成为无终端的会话组长，但它可以重新申请打开一个控制终端，通过 fork() 一个子进程，该子进程不是leader of the session，故**进程将不能重新打开控制终端**。
+
+<script type="preformatted">
 ~~~~~~~~~ C++
 // 父进程获得到的 PID 小于 0, 未创建成功
 if (pid < 0) {
@@ -256,18 +271,22 @@ else if (pid > 0) {
     exit(EXIT_SUCCESS);
 }
 ~~~~~~~~~
+</script>
 
 4. 改变工作目录和文件掩码
 进程活动时，其工作目录所在的文件系统不能卸下(比如工作目录在一个NFS中,运行一个daemon会导致umount无法成功)。一般需要将工作目录改变到根目录。对于需要转储核心，写运行日志的进程将工作目录改变到特定目录如chdir("/tmp")，进程从创建它的父进程那里继承了文件创建掩模。它可能修改守护进程所创建的文件的存取位。为防止这一点，将文件创建掩模清除：umask(0); **???why???**
+<script type="preformatted">
 ~~~~~~~~~ C++
 chdir("/");
 umask(0);
 ~~~~~~~~~
+</script>
 其中`umask`掩模函数可以参考[这篇博客](https://www.cnblogs.com/sench/p/8933638.html)
 
 5. 在子进程中关闭任何不需要的文件描述符
 用fork函数新建的子进程会从父进程那里继承一些已经打开了的文件。这些被打开的文件可能永远不会被守护进程读写，但它们一样消耗系统资源，而且可能导致所在的文件系统无法卸下。
 在上面的第二步之后，守护进程已经与所属的控制终端失去了联系。因此从终端输入的字符不可能达到守护进程，守护进程中用常规方法（如printf）输出的字符也不可能在终端上显示出来。所以，文件描述符为0、1和2 的3个文件（常说的输入、输出和报错）已经失去了存在的价值，也应被关闭.
+<script type="preformatted">
 ~~~~~~~~~~~ C++
 /* 关闭从父进程继承来的文件描述符 */
 #ifdef RLIMIT_NOFILE
@@ -279,9 +298,12 @@ for(i=3; i < nfiles; i++)
     close(i);
 #endif
 ~~~~~~~~~~~
+</script>
 
 6. 重定向0,1,2标准文件描述符
 将三个标准文件描述符定向到/dev/null中
+
+<script type="preformatted">
 ~~~~~~~~~~~ C++
 /* 重定向标准的3个文件描述符 */
 if(fd = open("/dev/null", O_RDWR) < 0)
@@ -289,11 +311,14 @@ if(fd = open("/dev/null", O_RDWR) < 0)
 for(i=0; i < 3; i++)
     dup2(fd, i);
 ~~~~~~~~~~~
+</script>
 
 !!! 
     其中4，5，6步骤是对当前工作环境的修改，可以先做，因为这些修改都会被子进程继承下来
 
 整体的test2.c代码如下：
+
+<script type="preformatted">
 ~~~~~~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h> //  dup(),dup2(),setsid()函数的头文件
@@ -377,6 +402,7 @@ int main()
     return 0;
 }
 ~~~~~~~~~~~~~~
+</script>
 
 ### 运行守护进程
 
@@ -433,6 +459,7 @@ CentOS 7 的 reptyr RPM 包, 传送到虚拟机上. 在虚拟机上使用 `yum i
 # 僵尸进程的处理
 
 ## 代码如下
+<script type="preformatted">
 ~~~~~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -484,6 +511,8 @@ int main()
     return 0;
 }
 ~~~~~~~~~~~~~
+</script>
+
 正确输出
 
 ![](./pic/3-1.png)
@@ -527,6 +556,7 @@ int main()
 ### 避免大量无用僵尸进程的途径
 
 通过signal(SIGCHLD, SIG_IGN)通知内核对子进程的结束不关心，由内核回收。如果不想让父进程挂起，可以在父进程中加入一条语句：signal(SIGCHLD,SIG_IGN);表示父进程忽略SIGCHLD信号，该信号是子进程退出的时候向父进程发送的
+<script type="preformatted">
 ~~~~~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -580,6 +610,7 @@ int main()
     return 0;
 }
 ~~~~~~~~~~~~~
+</script>
 观察结果
 
 ![](./pic/3-6.png)
@@ -590,6 +621,7 @@ int main()
 
 ## 代码
 为了能保证杀死程序，而不产生僵尸进程，添加`signal(SIGCHLD, SIG_IGN)`
+<script type="preformatted">
 ~~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -644,6 +676,7 @@ int main()
 }
 
 ~~~~~~~~~~
+</script>
 
 ## 杀死某一子进程
 打开另一终端，使用`kill`成功杀死子进程
@@ -687,11 +720,14 @@ signo参数是信号名，func的值是常量SIG_IGN、常量SIG_DFL或当接到
 signal的返回值是指向之前的信号处理程序的指针,或者SIG_ERR
 
 - kill()函数：
+<script type="preformatted">
 ~~~~~~~~~ C++
 #include <sys/types.h>
 #include <signal.h>
 int kill(pid_t pid, int sig);
 ~~~~~~~~~
+</script>
+
 pid参数
     - pid大于零时，pid是信号欲送往的进程的标识。s
     - pid等于零时，sig信号将送往所有与调用kill()的那个进程属同一个使用组的进程。
@@ -701,6 +737,7 @@ pid参数
 
 ### 代码完成
 - 方法1：利用信号处理函数
+<script type="preformatted">
 ~~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -774,6 +811,7 @@ int main()
     return 0;
 }
 ~~~~~~~~~~
+</script>
 运行结果如下
 
 ![](./pic/4-4.png)
@@ -790,6 +828,7 @@ signal(SIGHUP, SIG_DFL);
 
 - 方法2：
 在子进程中加入`prctl(PR_SET_PDEATHSIG, SIGTERM)`，使系统在父进程死亡时，向所有子进程发送`SIGTERM`以终止他们
+<script type="preformatted">
 ~~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -860,9 +899,11 @@ int main()
     return 0;
 }
 ~~~~~~~~~~
+</script>
 
 # 分裂子程序的极限测试
 ## 代码
+<script type="preformatted">
 ~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -937,6 +978,7 @@ int main(int argc, char **argv)
     return 0;
 }
 ~~~~~~~~
+</script>
 
 ## 实验步骤
 
@@ -961,17 +1003,21 @@ int main(int argc, char **argv)
 因此，当尝试申请进程失败时，不直接exit错误代码，而是等待wait()后，再次尝试申请
 
 wait()函数：进程一旦调用了 wait，就立即阻塞自己，由wait自动分析是否当前进程的某个子进程已经退出，如果让它找到了这样一个已经变成僵尸的子进程，wait 就会收集这个子进程的信息， 并把它彻底销毁后返回；如果没有找到这样一个子进程，wait就会一直阻塞在这里，直到有一个出现为止
+<script type="preformatted">
 ~~~~~~~~ C++
 #include<sys/types.h>
 #include<sys/wait.h>
 pid_t wait (int * status);
 ~~~~~~~~
+</script>
+
 wait()会暂时停止目前进程的执行，直到有信号来到或子进程结束。如果在调用wait()时子进程已经结束，则wait()会立即返回子进程结束状态值。
 **子进程的结束状态值**会由参数**status**返回，而子进程PID也会一并返回。如果不在意结束状态值，则参数status 可以设成NULL
 返回：如果执行成功则返回子进程PID，如果有错误发生则返回-1。失败原因存于errno 中。
 
 **注意本题子进程睡眠20s太坑..改成2s节约时间 = =**
 代码：
+<script type="preformatted">
 ~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -1048,6 +1094,8 @@ int main(int argc, char **argv)
     return 0;
 }
 ~~~~~~~~~
+</script>
+
 查看结果，设置内存仅为512MB时，通过等待结束——分配策略，成功申请100000个子进程
 ![](./pic/5-5.png)
 通过`ps l f -C test5-2` 查看最后仅剩 父进程
@@ -1055,11 +1103,13 @@ int main(int argc, char **argv)
 
 ## 守护进程回收子进程并计数
 waitpid()函数
+<script type="preformatted">
 ~~~~~~~~~ C++
 #include <sys/types.h> /* 提供类型pid_t的定义 */
 #include <sys/wait.h>
 pid_t waitpid(pid_t pid,int *status,int options)
 ~~~~~~~~~
+</script>
 - pid参数：
     - pid > 0: 只等待进程ID等于pid的子进程，不管其它已经有多少子进程运行结束退出了，只要指定的子进程还没有结束，waitpid就会一直等下去
     - pid = -1: 等待任何一个子进程退出，没有任何限制，此时waitpid和wait的作用一模一样。
@@ -1072,6 +1122,7 @@ pid_t waitpid(pid_t pid,int *status,int options)
     - 如果调用中出错，则返回-1，这时errno会被设置成相应的值以指示错误所在
 
 ## 代码
+<script type="preformatted">
 ~~~~~~~~~~~ C++
 #include <stdio.h>
 #include <unistd.h>
@@ -1175,6 +1226,8 @@ int main(int argc, char **argv)
     return 0;
 }
 ~~~~~~~~~~~
+</script>
+
 ![](./pic/5-7.png)
 
 如图所示，申请内存数与释放内存数相同
