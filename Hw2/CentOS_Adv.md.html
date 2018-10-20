@@ -10,7 +10,7 @@
 
 ![](./pic/1-1.png)
 
-通过`chmod -R 777 /d1651574` 给该目录设置最高共享权限，用`ls -l -d /d1651574` 查看其权限
+通过`chmod -R 777 /d1651574` 给该目录设置最高执行权限，用`ls -l -d /d1651574` 查看其权限
     
 ![](./pic/1-2.png)
 
@@ -29,7 +29,7 @@
 在`/etc/samba`目录下修改 `smb.conf` 文件，
     ~~~~~~~~~~~~~~~~~ bash
     # 备份smb.conf文件
-    cp /etc/samb/smb.conf /etc/samb/smb.conf/bak 
+    cp /etc/samba/smb.conf /etc/samb/smb.conf/bak 
     # 修改smb.conf文件
     vim /etc/samba/smb.conf
     ~~~~~~~~~~~~~~~~~
@@ -62,13 +62,26 @@
     
     ![](./pic/1-8.png)
 
+
 双击进入发现可以访问<br>
     
     ![](./pic/1-9.png width=400px)
 
+!!! ERROR: Seriously
+    "not have permission to access"
+
+    如果出现上述提示，表示windows没有权限进入到Linux共享目录中，有下述几种排查错误步骤
+
+    1. 检查Linux 的selinux 是否disabled， vim /etc/selinux/config 或者 临时 setenforce 0
+
+    2. 检查/etc/samba/smb.conf 配置文件是否正确以及设置的可读可写性
+
+    3. 检查Linux共享的目录路径，是否全部为比较高的共享权限!
+
+
 文件夹也可以打开，发现为空文件夹
-    
-    ![](./pic/1-10.png)
+
+![](./pic/1-10.png)
 
 Windows上建立映射盘符，如下图操作<br>
     
@@ -596,7 +609,7 @@ done
 </script>
 
 <style>
-    .md h2::before{
+    /* .md h2::before{
         content: counter(h2, lower-alpha)
     }
 
@@ -612,7 +625,7 @@ done
 
     .md h1.notinc::before{
         counter-increment: none;
-    }
+    } */
 
     .md .image {
         width: 80%;
@@ -626,9 +639,9 @@ done
         text-align: center;
     }
 
-    .level2 .tocnumber {
+    /* .level2 .tocnumber {
         display: none
-    }
+    } */
 
     .md code {
         background-color: lightgoldenrodyellow;
