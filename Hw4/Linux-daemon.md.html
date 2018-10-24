@@ -1,7 +1,7 @@
 <meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
 
 **守护进程的编写和使用方法**
-    1651574 贾昊霄1�7
+    1651574 贾昊霖
 
 
 # 正常程序的后台运行及前台切换
@@ -11,39 +11,39 @@
 ~~~~~~~~~ bash
 ./test1-1 &
 ~~~~~~~~~
-该命令将执行程序放到后台执行，但是标准输出还是会显示到当前终端，影响用户操作，所以最好是将输出重定向到其他文仄1�7
+该命令将执行程序放到后台执行，但是标准输出还是会显示到当前终端，影响用户操作，所以最好是将输出重定向到其他文件
 ~~~~~~~~~ bash
 ./test1-1 & > output.txt
 ~~~~~~~~~
-- `jobs`命令查看在后台执行的作业并找到作业对应的ID，加入命令��项-l 可以查看其PID
+- `jobs`命令查看在后台执行的作业并找到作业对应的ID，加入命令选项-l 可以查看其PID
 - `ctrl+z`命令，将已经在前台运行的作业放到后台执行
-- `ctrl+c`命令，将前台运行的作业终止运衄1�7
-- `fg %n` 将后台执行进程n调到前台执行，n表示jobnumber（��过jobs查看的进程编号，而非pid＄1�7
-执行 `fg %1` (数字取决于作业号, 另外可以不加参数或使甄1�7 %+ 戄1�7 %% 选择朢�近挂起的作业叄1�7, 以及 %- 选择第二近挂起的作业叄1�7) 射1�7 1 号作业切换到前台
-- `bg %n` 将在后台挂起的进程n，继续执衄1�7
-- `kill %n` 杢�掉后台运行的进程，n表示jobnumber（��过jobs查看的进程编号，而非pid＄1�7
+- `ctrl+c`命令，将前台运行的作业终止运行
+- `fg %n` 将后台执行进程n调到前台执行，n表示jobnumber（通过jobs查看的进程编号，而非pid）
+执行 `fg %1` (数字取决于作业号, 另外可以不加参数或使用 %+ 或 %% 选择最近挂起的作业号, 以及 %- 选择第二近挂起的作业号) 将 1 号作业切换到前台
+- `bg %n` 将在后台挂起的进程n，继续执行
+- `kill %n` 杀掉后台运行的进程，n表示jobnumber（通过jobs查看的进程编号，而非pid）
 
-- `tty`命令，获取原控制台的 TTY 设备各1�7
+- `tty`命令，获取原控制台的 TTY 设备名
 - `ps`常用指令大全
 附加选项        |    功能
 ----------------|------------
 不加任何选项     |   查看当前终端下正在运行的进程
 -A, -e          |   全部进程信息
-a               |   可查眄1�7
-f               |   以树的形式查看父子进程关糄1�7
--p              |   获取某个PID进程信息，加兄1�7-l 获取详细信息
+a               |   可查看
+f               |   以树的形式查看父子进程关系
+-p              |   获取某个PID进程信息，加入-l 获取详细信息
 j               |   查看当前
--t TTY设备各1�7    |   查看指定设备名的进程
+-t TTY设备名    |   查看指定设备名的进程
 --help a        |   查看ps的帮助的全部选项
 
 - `echo $$`指令可以查看当前控制台bash的PID
 
-- pstree -p PID叄1�7 查看当前程树
+- pstree -p PID号 查看当前程树
 
 ![](./pic/1-8.png)
 
 ## 实际应用
-如图扢�示，射1�71号进程挂起放入后台后重新调入前台运行〄1�7
+如图所示，将1号进程挂起放入后台后重新调入前台运行。
 
 ![](./pic/1-1.png)
 
@@ -53,123 +53,124 @@ j               |   查看当前
 
 查看父进程可用下述指令：
 ~~~~~~~~~ bash
-    ps -p 子进程号 -o ppid=   戄1�7
+    ps -p 子进程号 -o ppid=   或
     ps -p 子进程号 -l
 ~~~~~~~~~
 ![](./pic/1-3.png)
 
-在另丢�控制台终端查看所用用户的进程（包括历史进程）
+在另一控制台终端查看所用用户的进程（包括历史进程）
 ![](./pic/1-5.png)
 
-在另丢�控制台终端查看某进程及其父进程，用`ps -p 子进程号 -l`
+在另一控制台终端查看某进程及其父进程，用`ps -p 子进程号 -l`
 ![](./pic/1-4.png)
 
-使test1-1,test1-2在后台运行，通过`CTRL+D`逢�凄1�7
+使test1-1,test1-2在后台运行，通过`CTRL+D`退出
 ![](./pic/1-6.png)
 
-在另丢�个控制台查看，发现该进程已结杄1�7
+在另一个控制台查看，发现该进程已结束
 ![](./pic/1-7.png)
 
-再次使test1-1,test1-2在后台运行，通过`exit`或��`logout`逢�凄1�7
+再次使test1-1,test1-2在后台运行，通过`exit`或者`logout`退出
 ![](./pic/1-9.png)
 
-再在另一个控制台查看，可观察到进程没有结束，只是状��变为了T
+再在另一个控制台查看，可观察到进程没有结束，只是状态变为了T
 ![](./pic/1-10.png)
 
 !!! Tip
-    Linux process的STAT状��：
-    R (TASK_RUNNING)，可执行状����1�7
-    S (TASK_INTERRUPTIBLE)，可中断的睡眠状态��1�7
-    T (TASK_STOPPED or TASK_TRACED)，暂停状态或跟踪状����1�7
-    D (TASK_UNINTERRUPTIBLE)，不可中断的睡眠状����1�7
-    Z (TASK_DEAD - EXIT_ZOMBIE)，���出状态，进程成为僵尸进程〄1�7
-    X (TASK_DEAD - EXIT_DEAD)，���出状态，进程即将被销毁��1�7
+    Linux process的STAT状态：
+    R (TASK_RUNNING)，可执行状态。
+    S (TASK_INTERRUPTIBLE)，可中断的睡眠状态。
+    T (TASK_STOPPED or TASK_TRACED)，暂停状态或跟踪状态。
+    D (TASK_UNINTERRUPTIBLE)，不可中断的睡眠状态。
+    Z (TASK_DEAD - EXIT_ZOMBIE)，退出状态，进程成为僵尸进程。
+    X (TASK_DEAD - EXIT_DEAD)，退出状态，进程即将被销毁。
 
-下文来自冯舜的��结，整理如下：
+下文来自冯舜的总结，整理如下：
 !!! WARNING
-    1. bash终端丄1�7,Ctrl-D 字符表示输入流完毄1�7 (EOF), 会让 bash 遵循正常流程逢�凄1�7 (若不多加设置忽略 EOF).
     
-    2. exit 咄1�7 logout 同样会使 bash 正常逢�凄1�7. 此时, 评1�7 bash 启动的后台运行作业不会���凄1�7 (但后台挂起作业会逢�凄1�7), 而是作为孤儿进程袄1�7 init (1 号进稄1�7) 接纳作为子进稄1�7.
+    1. bash终端下,Ctrl-D 字符表示输入流完毕 (EOF), 会让 bash 遵循正常流程退出 (若不多加设置忽略 EOF).
+    
+    2. exit 和 logout 同样会使 bash 正常退出. 此时, 该 bash 启动的后台运行作业不会退出 (但后台挂起作业会退出), 而是作为孤儿进程被 init (1 号进程) 接纳作为子进程.
 
-    3. 点击 SSH 窗口戄1�7 Linux 桌面环境丄1�7 Terminal 窗口的1�7 “X 1�7 键���凄1�7, 则会各1�7 bash 送一丄1�7 SIGHUP 信号, bash 收到后也会向它管理的扢�有作业发凄1�7 SIGHUP 信号(除非该作业用 disown -h %1 排除凄1�7 SIGHUP 信号管理列表). 收到 SIGHUP 信号的进稄1�7, 默认终止.
-    故包括后台运行进程在内的作业都会被终歄1�7.
+    3. 点击 SSH 窗口或 Linux 桌面环境下 Terminal 窗口的 “X” 键退出, 则会向 bash 送一个 SIGHUP 信号, bash 收到后也会向它管理的所有作业发出 SIGHUP 信号(除非该作业用 disown -h %1 排除出 SIGHUP 信号管理列表). 收到 SIGHUP 信号的进程, 默认终止.
+    故包括后台运行进程在内的作业都会被终止.
 
 ![](./pic/1-11.png)
 
 
 # 守护进程的编写及使用方法
 ## 预备知识
-### 进程组1�7
-进程组就是一系列相互关联的进程集合，系统中的每一个进程也必须从属于某丢�个进程组；每个进程组中都会有丢�个唯丢�的1�7 ID(process group id)，简秄1�7 PGID；PGID 丢�般等同于进程组的创建进程的1�7 Process ID，��这个进进程丢�般也会被称为进程组先寄1�7(process group leader)，同丢�进程组中除了进程组先导外的其他进程都是其子进稄1�7
-进程组的存在，方便了系统对多个相关进程执行某些统丢�的操作，例如，我们可以一次��发送一个信号量给同丢�进程组中的所有进程��1�7
+### 进程组
+进程组就是一系列相互关联的进程集合，系统中的每一个进程也必须从属于某一个进程组；每个进程组中都会有一个唯一的 ID(process group id)，简称 PGID；PGID 一般等同于进程组的创建进程的 Process ID，而这个进进程一般也会被称为进程组先导(process group leader)，同一进程组中除了进程组先导外的其他进程都是其子进程
+进程组的存在，方便了系统对多个相关进程执行某些统一的操作，例如，我们可以一次性发送一个信号量给同一进程组中的所有进程。
 ### 会话
-会话（session）是丢�个若干进程组的集合，同样的，系统中每丢�个进程组也都必须从属于某丢�个会话；丢�个会话只拥有朢�多一个控制终端（也可以没有），该终端为会话中扢�有进程组中的进程扢�共用〄1�7
-丢�个会话中**前台进程组1�7**只会有一个，只有其中的进程才可以和控制终端进行交互；除了前台进程组外的进程组，都昄1�7**后台进程组1�7**
-和进程组先导类似，会话中也有**会话先导**(session leader)的概念，用来表示建立起到控制终端连接的进程��在拥有控制终端的会话中，session leader 也被称为控制进程(controlling process)，一般来说控制进程也就是登入系统的1�7 shell 进程(login shell)
+会话（session）是一个若干进程组的集合，同样的，系统中每一个进程组也都必须从属于某一个会话；一个会话只拥有最多一个控制终端（也可以没有），该终端为会话中所有进程组中的进程所共用。
+一个会话中**前台进程组**只会有一个，只有其中的进程才可以和控制终端进行交互；除了前台进程组外的进程组，都是**后台进程组**
+和进程组先导类似，会话中也有**会话先导**(session leader)的概念，用来表示建立起到控制终端连接的进程。在拥有控制终端的会话中，session leader 也被称为控制进程(controlling process)，一般来说控制进程也就是登入系统的 shell 进程(login shell)
 
 ![](./pic/2-1.png)
 
-图片丄1�7
+图片中
 PPID 指父进程 id
-PID 指进稄1�7 id
+PID 指进程 id
 PGID 指进程组 id
-SID 指会评1�7 id
+SID 指会话 id
 TTY 指会话的控制终端设备
-TPGID 指前台进程组的1�7 PGID
-COMMAND 指进程所执行的命仄1�7
+TPGID 指前台进程组的 PGID
+COMMAND 指进程所执行的命令
 
 ### 信号
-信号（signal）就是告知某个进程发生了某个事件的��知，有时也叫软件中斄1�7
+信号（signal）就是告知某个进程发生了某个事件的通知，有时也叫软件中断
 
 ### SIGHUP信号
 [学习网站](https://blog.csdn.net/z_ryan/article/details/80952498)
 
-SIGHUP 信号在用户终端连掄1�7(正常或非正常)结束时发凄1�7, 通常是在终端的控制进程结束时, 通知同一session内的各个作业, 这时它们与控制终端不再关聄1�7. 系统对SIGHUP信号的默认处理是终止收到该信号的进程。所以若程序中没有捕捉该信号，当收到该信号时，进程就会���出��1�7 
-〢�〢� 
-SIGHUP会在以下3种情况下被发送给相应的进稄1�7:
-- 终端关闭时，该信号被发��到session首进程以及作为job提交的进程（即用 & 符号提交的进稄1�7  
-- session首进程���出时，该信号被发送到该session中的前台进程组中的每丢�个进稄1�7 
-- 父进程���出导致进程组成为孤儿进程组，且该进程组中有进程处于停止状态（收到SIGSTOP或SIGTSTP信号），该信号会被发送到该进程组中的每一个进稄1�7 
+SIGHUP 信号在用户终端连接(正常或非正常)结束时发出, 通常是在终端的控制进程结束时, 通知同一session内的各个作业, 这时它们与控制终端不再关联. 系统对SIGHUP信号的默认处理是终止收到该信号的进程。所以若程序中没有捕捉该信号，当收到该信号时，进程就会退出。 
+　　 
+SIGHUP会在以下3种情况下被发送给相应的进程:
+- 终端关闭时，该信号被发送到session首进程以及作为job提交的进程（即用 & 符号提交的进程  
+- session首进程退出时，该信号被发送到该session中的前台进程组中的每一个进程 
+- 父进程退出导致进程组成为孤儿进程组，且该进程组中有进程处于停止状态（收到SIGSTOP或SIGTSTP信号），该信号会被发送到该进程组中的每一个进程 
 
-〢�  例如：在我们登录Linux时，系统会分配给登录用户丢�个终竄1�7(Session)。在这个终端运行的所有程序，包括前台进程组和后台进程组，丢�般都属于这个 Session。当用户逢�出Linux登录时，前台进程组和后台有对终端输出的进程将会收到SIGHUP信号。这个信号的默认操作为终止进程，因此前台迄1�7 程组和后台有终端输出的进程就会中止��1�7
+　  例如：在我们登录Linux时，系统会分配给登录用户一个终端(Session)。在这个终端运行的所有程序，包括前台进程组和后台进程组，一般都属于这个 Session。当用户退出Linux登录时，前台进程组和后台有对终端输出的进程将会收到SIGHUP信号。这个信号的默认操作为终止进程，因此前台进 程组和后台有终端输出的进程就会中止。
 
-此外，对于与终端脱离关系的守护进程，这个信号用于通知它重新读取配置文件��1�7 比如xinetd超级服务程序〄1�7 
-〢�〢�当xinetd程序在接收到SIGHUP信号之后调用hard_reconfig函数，它将循环读叄1�7/etc/xinetd.d/目录下的每个子配置文件，并检测其变化〄1�7
+此外，对于与终端脱离关系的守护进程，这个信号用于通知它重新读取配置文件。 比如xinetd超级服务程序。 
+　　当xinetd程序在接收到SIGHUP信号之后调用hard_reconfig函数，它将循环读取/etc/xinetd.d/目录下的每个子配置文件，并检测其变化。
 
 ### SIGCHLD信号
-在一个进程终止或者停止时，将SIGCHLD信号发��给其父进程，按系统默认将忽略此信号，如果父进程希望被告知其子系统的这种状��，则应捕捉此信叄1�7
-此信号与僵尸进程的处理有兄1�7
+在一个进程终止或者停止时，将SIGCHLD信号发送给其父进程，按系统默认将忽略此信号，如果父进程希望被告知其子系统的这种状态，则应捕捉此信号
+此信号与僵尸进程的处理有关
 
 ### SIGTERM信号
-程序结束(terminate)信号, 与SIGKILL不同的是该信号可以被阻塞和处理����常用来要求程序自己正常逢�出，shell命令kill缺省产生这个信号。如果进程终止不了，我们才会尝试SIGKILL
+程序结束(terminate)信号, 与SIGKILL不同的是该信号可以被阻塞和处理。通常用来要求程序自己正常退出，shell命令kill缺省产生这个信号。如果进程终止不了，我们才会尝试SIGKILL
 
 ### SIGINT信号
-程序终止(interrupt)信号, 在用户键入INTR字符(通常是Ctrl-C)时发出，用于通知前台进程组终止进程��1�7
+程序终止(interrupt)信号, 在用户键入INTR字符(通常是Ctrl-C)时发出，用于通知前台进程组终止进程。
 
 ### SIGKILL信号
-用来立即结束程序的运衄1�7. 本信号不能被阻塞、处理和忽略。如果管理员发现某个进程终止不了，可尝试发��这个信叄1�7
+用来立即结束程序的运行. 本信号不能被阻塞、处理和忽略。如果管理员发现某个进程终止不了，可尝试发送这个信号
 
 ### SIGUSER1 SIGUSER2
-系统留给用户使用的信叄1�7
+系统留给用户使用的信号
 
 ### init进程
-init进程，它是一个由内核启动的用户级进程〄1�7
+init进程，它是一个由内核启动的用户级进程。
 
-内核自行启动（已经被载入内存，开始运行，并已初始化所有的设备驱动程序和数据结构等）之后，就��过启动丢�个用户级程序init的方式，完成引导进程。所以init始终是第丢�个进程（**其进程编号始终为1**＄1�7
+内核自行启动（已经被载入内存，开始运行，并已初始化所有的设备驱动程序和数据结构等）之后，就通过启动一个用户级程序init的方式，完成引导进程。所以init始终是第一个进程（**其进程编号始终为1**）
 
 ## 守护进程
 [学习网站](http://www.cnblogs.com/mickole/p/3188321.html)
-Linux Daemon（守护进程）是运行在后台的一种特殊进程��它独立于控制终端并且周期��地执行某种任务或等待处理某些发生的事件。它不需要用户输入就能运行��且提供某种服务，不是对整个系统就是对某个用户程序提供服务��Linux系统的大多数服务就是通过守护进程实现的��1�7
+Linux Daemon（守护进程）是运行在后台的一种特殊进程。它独立于控制终端并且周期性地执行某种任务或等待处理某些发生的事件。它不需要用户输入就能运行而且提供某种服务，不是对整个系统就是对某个用户程序提供服务。Linux系统的大多数服务就是通过守护进程实现的。
 
-**丢�个守护进程的父进程是init进程**，因为它真正的父进程在fork出子进程后就先于子进程exit逢�出了，所以它是一个由init继承的孤儿进程��守护进程是非交互式程序，没有控制终端，扢�以任何输出，无论是向标准输出设备stdout还是标准出错设备stderr的输出都霢�要特殊处理��1�7
+**一个守护进程的父进程是init进程**，因为它真正的父进程在fork出子进程后就先于子进程exit退出了，所以它是一个由init继承的孤儿进程。守护进程是非交互式程序，没有控制终端，所以任何输出，无论是向标准输出设备stdout还是标准出错设备stderr的输出都需要特殊处理。
 
-守护进程的名称��常以d结尾，比如sshd、xinetd、crond筄1�7
+守护进程的名称通常以d结尾，比如sshd、xinetd、crond等
 
-### 守护进程的创廄1�7
+### 守护进程的创建
 [学习网址1](https://blog.csdn.net/woxiaohahaa/article/details/53487602)
 [学习网址2](https://www.cnblogs.com/Flychown/p/6874252.html)
 
-#### 利用轮子来创建守护进稄1�7
+#### 利用轮子来创建守护进程
 守护进程可以通过系统函数daemon()来创建，但此方法不能弄清楚守护进程创建的规则，因此不推荐
 
 <script type="preformatted">
@@ -193,7 +194,7 @@ int myPrint()
 int main() {
     daemon(1, 1);
 
-    // 禁用输出缓冲匄1�7
+    // 禁用输出缓冲区
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     for( i = 0; i < 3; ++i) {
@@ -211,34 +212,34 @@ int main() {
 #### 手写守护进程
 守护进程的创建流程：
 
-1. 创建子进程，父进程���出����脱离控制终竄1�7
-    创建子进程之后父进程逢�出，会��成子进程没有父进程，从而使子进程变成一个孤儿进程（因此子进程不会随睢�父进程���出�����出），即子进程会被init 1号进程领养，因此init进程将成为该子进程的父进稄1�7
-    在Linux中，每当系统发现丢�个孤儿进程，就会自动甄1�71号进程（也就是init进程）收养它，这样，原先的子进程就会变成init进程的子进程亄1�7
+1. 创建子进程，父进程退出——脱离控制终端
+    创建子进程之后父进程退出，会造成子进程没有父进程，从而使子进程变成一个孤儿进程（因此子进程不会随着父进程退出而退出），即子进程会被init 1号进程领养，因此init进程将成为该子进程的父进程
+    在Linux中，每当系统发现一个孤儿进程，就会自动由1号进程（也就是init进程）收养它，这样，原先的子进程就会变成init进程的子进程了
 
 <script type="preformatted">
 ~~~~~~~~~ C++
-// 父进程获得到的1�7 PID 小于 0, 未创建成劄1�7
+// 父进程获得到的 PID 小于 0, 未创建成功
 if (pid < 0) {
     printf("子进程创建失败！\n");
     exit(EXIT_FAILURE);
 }    
-// 父进程获取的 PID 大于 0, 创建成功, PID 即为子进稄1�7 PID，然后���出父进程
+// 父进程获取的 PID 大于 0, 创建成功, PID 即为子进程 PID，然后退出父进程
 else if (pid > 0) {
-    printf("子进程创建成劄1�7, PID=%d\n", pid);
+    printf("子进程创建成功, PID=%d\n", pid);
     exit(EXIT_SUCCESS);
 }
 ~~~~~~~~~
 </script>
 
     
-    注意fork()函数调用丢�次，会返回两次，
+    注意fork()函数调用一次，会返回两次，
     
-    - 在父进程中，fork返回新创建子进程的进程ID＄1�7
-    - 在子进程中，fork返回0＄1�7
-    - 出现错误，返回负倄1�7
+    - 在父进程中，fork返回新创建子进程的进程ID；
+    - 在子进程中，fork返回0；
+    - 出现错误，返回负值
 
-2. 在子进程中创建新会话—��脱离父进程的会话组和进程组
-    调用setsid函数的进程成为新的会话的首进程，并与其父进程的会话组和进程组脱离，成为新的1�7 session leader 和进程组 leader 
+2. 在子进程中创建新会话——脱离父进程的会话组和进程组
+    调用setsid函数的进程成为新的会话的首进程，并与其父进程的会话组和进程组脱离，成为新的 session leader 和进程组 leader 
 
 <script type="preformatted">
 ~~~~~~~~~ C++
@@ -250,44 +251,44 @@ if(setsid() < 0) {
 </script>
 
 !!!    
-    在调用fork()函数时，子进程全盘复制了父进程的会话期��进程组和控制终端等，虽然父进程逢�出了，但原先的会话期、进程组和控制终端等并没有改变，因此，还不是真正意义上的独立，��setsid()函数能够使进程完全独立出来，从��脱离所有其他进程的控制，成为一个后台进稄1�7
+    在调用fork()函数时，子进程全盘复制了父进程的会话期、进程组和控制终端等，虽然父进程退出了，但原先的会话期、进程组和控制终端等并没有改变，因此，还不是真正意义上的独立，而setsid()函数能够使进程完全独立出来，从而脱离所有其他进程的控制，成为一个后台进程
 
-3. 再次 fork() 丢�个子进程并让父进程���出��1�7
-本步骤很关键〄1�7
+3. 再次 fork() 一个子进程并让父进程退出。
+本步骤很关键。
 **it is possible for the child to regain control of the terminal, but once it has lost control the forked grandchild cannot do this. **
-现在，进程已经成为无终端的会话组长，但它可以重新申请打开丢�个控制终端，通过 fork() 丢�个子进程，该子进程不是leader of the session，故**进程将不能重新打弢�控制终端**〄1�7
+现在，进程已经成为无终端的会话组长，但它可以重新申请打开一个控制终端，通过 fork() 一个子进程，该子进程不是leader of the session，故**进程将不能重新打开控制终端**。
 
 <script type="preformatted">
 ~~~~~~~~~ C++
-// 父进程获得到的1�7 PID 小于 0, 未创建成劄1�7
+// 父进程获得到的 PID 小于 0, 未创建成功
 if (pid < 0) {
     printf("子进程创建失败！\n");
     exit(EXIT_FAILURE);
 }    
-// 父进程获取的 PID 大于 0, 创建成功, PID 即为子进稄1�7 PID
+// 父进程获取的 PID 大于 0, 创建成功, PID 即为子进程 PID
 else if (pid > 0) {
-    printf("子进程创建成劄1�7, PID=%d\n", pid);
+    printf("子进程创建成功, PID=%d\n", pid);
     exit(EXIT_SUCCESS);
 }
 ~~~~~~~~~
 </script>
 
-4. 改变工作目录和文件掩砄1�7
-进程活动时，其工作目录所在的文件系统不能卸下(比如工作目录在一个NFS丄1�7,运行丢�个daemon会导致umount无法成功)。一般需要将工作目录改变到根目录。对于需要转储核心，写运行日志的进程将工作目录改变到特定目录如chdir("/tmp")，进程从创建它的父进程那里继承了文件创建掩模。它可能修改守护进程扢�创建的文件的存取位��为防止这一点，将文件创建掩模清除：umask(0); **???why???**
+4. 改变工作目录和文件掩码
+进程活动时，其工作目录所在的文件系统不能卸下(比如工作目录在一个NFS中,运行一个daemon会导致umount无法成功)。一般需要将工作目录改变到根目录。对于需要转储核心，写运行日志的进程将工作目录改变到特定目录如chdir("/tmp")，进程从创建它的父进程那里继承了文件创建掩模。它可能修改守护进程所创建的文件的存取位。为防止这一点，将文件创建掩模清除：umask(0); **???why???**
 <script type="preformatted">
 ~~~~~~~~~ C++
 chdir("/");
 umask(0);
 ~~~~~~~~~
 </script>
-其中`umask`掩模函数可以参��[这篇博客](https://www.cnblogs.com/sench/p/8933638.html)
+其中`umask`掩模函数可以参考[这篇博客](https://www.cnblogs.com/sench/p/8933638.html)
 
-5. 在子进程中关闭任何不霢�要的文件描述笄1�7
-用fork函数新建的子进程会从父进程那里继承一些已经打弢�了的文件。这些被打开的文件可能永远不会被守护进程读写，但它们丢�样消耗系统资源，而且可能导致扢�在的文件系统无法卸下〄1�7
-在上面的第二步之后，守护进程已经与所属的控制终端失去了联系��因此从终端输入的字符不可能达到守护进程，守护进程中用常规方法（如printf）输出的字符也不可能在终端上显示出来。所以，文件描述符为0〄1�71咄1�72 的1�73个文件（常说的输入��输出和报错）已经失去了存在的价值，也应被关闄1�7.
+5. 在子进程中关闭任何不需要的文件描述符
+用fork函数新建的子进程会从父进程那里继承一些已经打开了的文件。这些被打开的文件可能永远不会被守护进程读写，但它们一样消耗系统资源，而且可能导致所在的文件系统无法卸下。
+在上面的第二步之后，守护进程已经与所属的控制终端失去了联系。因此从终端输入的字符不可能达到守护进程，守护进程中用常规方法（如printf）输出的字符也不可能在终端上显示出来。所以，文件描述符为0、1和2 的3个文件（常说的输入、输出和报错）已经失去了存在的价值，也应被关闭.
 <script type="preformatted">
 ~~~~~~~~~~~ C++
-/* 关闭从父进程继承来的文件描述笄1�7 */
+/* 关闭从父进程继承来的文件描述符 */
 #ifdef RLIMIT_NOFILE
 if (getrlimit(RLIMIT_NOFILE, &rl) == -1)
     ERROR_EXIT("getrlimit failed!");
@@ -299,8 +300,8 @@ for(i=3; i < nfiles; i++)
 ~~~~~~~~~~~
 </script>
 
-6. 重定各1�70,1,2标准文件描述笄1�7
-将三个标准文件描述符定向刄1�7/dev/null丄1�7
+6. 重定向0,1,2标准文件描述符
+将三个标准文件描述符定向到/dev/null中
 
 <script type="preformatted">
 ~~~~~~~~~~~ C++
@@ -313,9 +314,9 @@ for(i=0; i < 3; i++)
 </script>
 
 !!! 
-    其中4＄1�75＄1�76步骤是对当前工作环境的修改，可以先做，因为这些修改都会被子进程继承下杄1�7
+    其中4，5，6步骤是对当前工作环境的修改，可以先做，因为这些修改都会被子进程继承下来
 
-整体的test2.c代码如下＄1�7
+整体的test2.c代码如下：
 
 <script type="preformatted">
 ~~~~~~~~~~~~~~ C++
@@ -341,35 +342,35 @@ void myDaemonize()
     pid_t pid;
     int i, fd;
 
-    // 创建丢�个子进程
+    // 创建一个子进程
     pid = fork();
 
-    // 父进程获得到的1�7 PID 小于 0, 未创建成劄1�7
+    // 父进程获得到的 PID 小于 0, 未创建成功
     if (pid < 0) {
         printf("子进程创建失败！\n");
         exit(EXIT_FAILURE);
     }
-    // 父进程获取的 PID 大于 0, 创建成功, PID 即为子进稄1�7 PID
+    // 父进程获取的 PID 大于 0, 创建成功, PID 即为子进程 PID
     else if (pid > 0) {
-        printf("子进程创建成劄1�7, PID=%d\n", pid);
+        printf("子进程创建成功, PID=%d\n", pid);
         exit(EXIT_SUCCESS);
     }
 
-    // 以下操作即在子进程进衄1�7
+    // 以下操作即在子进程进行
     // 使子进程脱离原进程组, 成为新的 session leader 和进程组 leader
     if ( setsid() < 0 ) {
         printf("无法使子进程成为 SESSION LEADER!\n");
         exit(EXIT_FAILURE);
     }
 
-    // 再次 fork 孙进稄1�7, 并终止子进程
+    // 再次 fork 孙进程, 并终止子进程
     pid = fork();
     if (pid < 0) {
         printf("孙进程创建失败！\n");
         exit(EXIT_FAILURE);
     }
     else if (pid > 0) {
-        printf("孙进程创建成劄1�7, PID=%d\n", pid);
+        printf("孙进程创建成功, PID=%d\n", pid);
         exit(EXIT_SUCCESS);
     }
 
@@ -377,7 +378,7 @@ void myDaemonize()
     umask(0);
     chdir("/");
     
-    // 关闭从父进程继承来的文件描述笄1�7
+    // 关闭从父进程继承来的文件描述符
 #ifdef RLIMIT_NOFILE
     if (getrlimit(RLIMIT_NOFILE, &rl) == -1)
         printf("getrlimit failed!");
@@ -410,52 +411,52 @@ int main()
 
 
 ### 查看 test2 进程标识和父进程标识
-尝试甄1�7 jobs 查看后台作业列表, 但没有得到输凄1�7, 说明两个守护进程已经不受本终端控刄1�7
+尝试用 jobs 查看后台作业列表, 但没有得到输出, 说明两个守护进程已经不受本终端控制
 
 ![](./pic/2-3.png)
 
-使用`ps l -C 可执行文件名` 查询进程＄1�7 观察到进程PID=2016, 父进程PPID=1, 已经成为孤儿进程，被init进程(CentOS中为`systemd`)接管为子进程
+使用`ps l -C 可执行文件名` 查询进程， 观察到进程PID=2016, 父进程PPID=1, 已经成为孤儿进程，被init进程(CentOS中为`systemd`)接管为子进程
 
 ![](./pic/2-4.png)
 
-与普通进程对比，在本命令行运行test1-2,输出"贾昊霄1�7"
+与普通进程对比，在本命令行运行test1-2,输出"贾昊霖"
 
 ![](./pic/2-5.png)
 
-打开另一个命令行，��过ps l命令查看
+打开另一个命令行，通过ps l命令查看
 
 ![](./pic/2-6.png)
 
-可以观察到可以查询到当前test1-2的进程，但是守护进程test2并没朄1�7
+可以观察到可以查询到当前test1-2的进程，但是守护进程test2并没有
 
-由于守护进程是全屢�的，与控制台无关，故另一个控制太太同样可以用`ps l -C 可执行文件名` 查看进程信息
+由于守护进程是全局的，与控制台无关，故另一个控制太太同样可以用`ps l -C 可执行文件名` 查看进程信息
 
 ![](./pic/2-7.png)
 
-`TTY`丢�栏显示为`?`,表示不属于任何终竄1�7
+`TTY`一栏显示为`?`,表示不属于任何终端
 
-通过`CTRL+D` 逢�出后，再另一命令行中观察 test2与test1-2
+通过`CTRL+D` 退出后，再另一命令行中观察 test2与test1-2
 
 ![](./pic/2-8.png)
 
-发现state均为 stop，但是守护进程的flag丄1�71
+发现state均为 stop，但是守护进程的flag为1
 
-<!-- 为了将test2重新打印在新终端上，霢�要安装`reptyr`服务,从[CentOS package官网](https://centos.pkgs.org/7/epel-x86_64/reptyr-0.5-1.el7.x86_64.rpm.html) 下载适合
-CentOS 7 的1�7 reptyr RPM 匄1�7, 传��到虚拟机上. 在虚拟机上使甄1�7 `yum install -y reptyr-0.5-
+<!-- 为了将test2重新打印在新终端上，需要安装`reptyr`服务,从[CentOS package官网](https://centos.pkgs.org/7/epel-x86_64/reptyr-0.5-1.el7.x86_64.rpm.html) 下载适合
+CentOS 7 的 reptyr RPM 包, 传送到虚拟机上. 在虚拟机上使用 `yum install -y reptyr-0.5-
 1.el7.x86_64.rpm` 安装
 ![](./pic/2-9.png)
 
-用`reptyr -s 守护进程PID号` 命令将指令输出到新终竄1�7
+用`reptyr -s 守护进程PID号` 命令将指令输出到新终端
 ![](./pic/2-10.png) -->
 
-<!-- **参��冯舜的文档**，有四种方法可以实现:
+<!-- **参考冯舜的文档**，有四种方法可以实现:
 ### 进程中消息的保存
 1. 利用上述`reptyr -s PID号`
-2. 使用日志文件，输出重定向至日志文仄1�7
+2. 使用日志文件，输出重定向至日志文件
 3. 使用screen工具
-4. 使用信号动��改变程序进行输出的 pts 设备 -->
+4. 使用信号动态改变程序进行输出的 pts 设备 -->
 
-# 僵尸进程的处琄1�7
+# 僵尸进程的处理
 
 ## 代码如下
 <script type="preformatted">
@@ -487,10 +488,10 @@ int main()
 
     for (i = 0 ; i < 10 ; i++) {
 
-        // fork()有两个进程返回��1�7
+        // fork()有两个进程返回值
         pid = fork();
         if (pid < 0) {
-            printf("创建子进程失贄1�7!\n");
+            printf("创建子进程失败!\n");
             exit(EXIT_FAILURE);
         }
         // 如果当前为子进程
@@ -517,23 +518,23 @@ int main()
 ![](./pic/3-1.png)
 
 ## 子进程与守护进程关系
-保持程序的运行，转到另一终端，��过`ps f -l -C test3-1`显示有关test3-1有关的进程树
-**也可通过 ps f l -C test3-1**命令查看，有较小的区刄1�7
+保持程序的运行，转到另一终端，通过`ps f -l -C test3-1`显示有关test3-1有关的进程树
+**也可通过 ps f l -C test3-1**命令查看，有较小的区别
 
 ![](./pic/3-2.png)
 
-结果表明 2471号进程为父进稄1�7
+结果表明 2471号进程为父进程
 
 ## 僵尸进程
 
 [学习网站1](https://www.cnblogs.com/Anker/p/3271773.html)
 [学习网站2](https://www.cnblogs.com/wuchanming/p/4020463.html)
 
-### 僵尸进程的概忄1�7
-僵尸进程：一个进程使用fork创建子进程，如果子进程���出，而父进程并没有调用wait或waitpid获取子进程的结束状��信息，那么子进程的进程描述符仍然保存在系统中��这种进程称之为僵死进程
+### 僵尸进程的概念
+僵尸进程：一个进程使用fork创建子进程，如果子进程退出，而父进程并没有调用wait或waitpid获取子进程的结束状态信息，那么子进程的进程描述符仍然保存在系统中。这种进程称之为僵死进程
 
-### 设置僵尸进程的目的1�7
-维护子进程的信息，以便父进程在以后某个时候获取��这些信息至少包括进程ID，进程的终止状��，以及该进程使用的CPU时间，所以当终止子进程的父进程调用wait或waitpid时就可以得到这些信息
+### 设置僵尸进程的目的
+维护子进程的信息，以便父进程在以后某个时候获取。这些信息至少包括进程ID，进程的终止状态，以及该进程使用的CPU时间，所以当终止子进程的父进程调用wait或waitpid时就可以得到这些信息
 
 ### 观察僵尸进程
 当主程序运行至输出全部为main时，再在另一终端观察test3-1有关进程树，发现state由S变为Z(Zombie)
@@ -541,20 +542,20 @@ int main()
 ![](./pic/3-3.png)
 ![](./pic/3-4.png)
 
-### 杢�死僵尸进程的途径
-对于丢�个定期的产生子进程的父进程，产生的子进程霢�要做的事情很少，子进程做完该做的事情之后就���出了，故生命周期很短。但是，父进程只管生成新的子进程，至于子进程 逢�出之后的事情，则丢�概不闻不问，这样，系统运行上丢�段时间之后，系统中就会存在很多的僵死进程，��若用ps命令查看的话，就会看到很多状态为Z的进程��1�7 严格地来说，僵死进程并不是问题的根源，罪魁祸首是**产生出大量僵死进程的那个父进稄1�7**。因此，当我们寻求如何消灭系统中大量的僵死进程时，答案就是把产生大量僵死进程的那个元凶枪毙掉，即通过通过kill发��SIGTERM或��SIGKILL杢�死父进程。枪毙了元凶进程之后，它产生的僵死进程就变成了孤儿进程，这些孤儿进程会被init进程接管，init进程会wait()这些孤儿进程，释放它们占用的系统进程表中的资源，这样，这些已经僵死的孤儿进程 就能瞑目而去亄1�7
+### 杀死僵尸进程的途径
+对于一个定期的产生子进程的父进程，产生的子进程需要做的事情很少，子进程做完该做的事情之后就退出了，故生命周期很短。但是，父进程只管生成新的子进程，至于子进程 退出之后的事情，则一概不闻不问，这样，系统运行上一段时间之后，系统中就会存在很多的僵死进程，倘若用ps命令查看的话，就会看到很多状态为Z的进程。 严格地来说，僵死进程并不是问题的根源，罪魁祸首是**产生出大量僵死进程的那个父进程**。因此，当我们寻求如何消灭系统中大量的僵死进程时，答案就是把产生大量僵死进程的那个元凶枪毙掉，即通过通过kill发送SIGTERM或者SIGKILL杀死父进程。枪毙了元凶进程之后，它产生的僵死进程就变成了孤儿进程，这些孤儿进程会被init进程接管，init进程会wait()这些孤儿进程，释放它们占用的系统进程表中的资源，这样，这些已经僵死的孤儿进程 就能瞑目而去了
 
-### 僵尸进程的处琄1�7
-杢�死他们的父进程，使他们成为孤儿进程，进��被init 1号进程接纳清琄1�7
+### 僵尸进程的处理
+杀死他们的父进程，使他们成为孤儿进程，进而被init 1号进程接纳清理
 
 ![](./pic/3-5.png)
 
-上图中上面的箭头为尝试杀死僵尸进程，但经查看没有成功杢�歄1�7
-下方的箭头为杢�死父进程，经查看父进程与其生成的子（僵尸）进程一并被杢�歄1�7
+上图中上面的箭头为尝试杀死僵尸进程，但经查看没有成功杀死
+下方的箭头为杀死父进程，经查看父进程与其生成的子（僵尸）进程一并被杀死
 
-### 避免大量无用僵尸进程的��径
+### 避免大量无用僵尸进程的途径
 
-通过signal(SIGCHLD, SIG_IGN)通知内核对子进程的结束不关心，由内核回收。如果不想让父进程挂起，可以在父进程中加入一条语句：signal(SIGCHLD,SIG_IGN);表示父进程忽略SIGCHLD信号，该信号是子进程逢�出的时��向父进程发送的
+通过signal(SIGCHLD, SIG_IGN)通知内核对子进程的结束不关心，由内核回收。如果不想让父进程挂起，可以在父进程中加入一条语句：signal(SIGCHLD,SIG_IGN);表示父进程忽略SIGCHLD信号，该信号是子进程退出的时候向父进程发送的
 <script type="preformatted">
 ~~~~~~~~~~~~~ C++
 #include <stdio.h>
@@ -586,10 +587,10 @@ int main()
 
     for (i = 0 ; i < 10 ; i++) {
 
-        // fork()有两个进程返回��1�7
+        // fork()有两个进程返回值
         pid = fork();
         if (pid < 0) {
-            printf("创建子进程失贄1�7!\n");
+            printf("创建子进程失败!\n");
             exit(EXIT_FAILURE);
         }
         // 如果当前为子进程
@@ -614,7 +615,7 @@ int main()
 
 ![](./pic/3-6.png)
 
-在子进程运行结束后，由于父进程忽略了SIGCHLD信号，由init负责wait清理运行结束的子进程，因此后台没有僵尸进稄1�7
+在子进程运行结束后，由于父进程忽略了SIGCHLD信号，由init负责wait清理运行结束的子进程，因此后台没有僵尸进程
 
 # 守护进程及其子进程的处理
 
@@ -651,10 +652,10 @@ int main()
 
     for (i = 0 ; i < 10 ; i++) {
 
-        // fork()有两个进程返回��1�7
+        // fork()有两个进程返回值
         pid = fork();
         if (pid < 0) {
-            printf("创建子进程失贄1�7!\n");
+            printf("创建子进程失败!\n");
             exit(EXIT_FAILURE);
         }
         // 如果当前为子进程
@@ -677,33 +678,33 @@ int main()
 ~~~~~~~~~~
 </script>
 
-## 杢�死某丢�子进稄1�7
-打开另一终端，使用`kill`成功杢�死子进程
+## 杀死某一子进程
+打开另一终端，使用`kill`成功杀死子进程
 
 ![](./pic/4-1.png)
 
-## 快��杀死所有子进程
+## 快速杀死所有子进程
 
-`pkill -P 父进程PID` 命令可以快��杀死指定父进程的所有子进程
+`pkill -P 父进程PID` 命令可以快速杀死指定父进程的所有子进程
 
 ![](./pic/4-2.png)
 
-## 杢�死父进程
+## 杀死父进程
 
 查看命令选择`ps f l -C test4-1`
 
 ![](./pic/4-3.png)
 
-观察到子进程的父进程全部变为了init1号进程，并且STAT状��属性由S+变为了S，说明它们不再是原控制台的前台进稄1�7.
+观察到子进程的父进程全部变为了init1号进程，并且STAT状态属性由S+变为了S，说明它们不再是原控制台的前台进程.
 
-## 代码改进，使杢�死父进程的同时，终止扢�有子进程
+## 代码改进，使杀死父进程的同时，终止所有子进程
 
 [学习网址1](https://www.cnblogs.com/nufangrensheng/p/3514547.html)
 [学习网址2](https://www.cnblogs.com/leeming0222/articles/3994125.html)
 [学习网址3](https://blog.csdn.net/qq_35420908/article/details/70175247)
 
 ### 补充知识
-- signal() 信号处理程序（signal handler）或信号捕捉函数（signal-catching function）：为指定的信号安装丢�个新的信号处理函敄1�7
+- signal() 信号处理程序（signal handler）或信号捕捉函数（signal-catching function）：为指定的信号安装一个新的信号处理函数
 ~~~~~~~~ C++
 #include <signal.h>
 void ( *signal(int signo, void (*func)(int)))(int);
@@ -712,13 +713,13 @@ void ( *signal(int signo, void (*func)(int)))(int);
 #define    SIG_DFL        ( void (*) () )0
 #define    SIG_IGN        ( void (*) () )1
 ~~~~~~~~
-signo参数是信号名，func的��是常量SIG_IGN、常量SIG_DFL或当接到此信号后要调用的函数的地坢�
-    - SIG_IGN，向内核表示忽略此信号（记住有两个信号SIGKILL和SIGSTOP不能忽略＄1�7
-    - SIG_DFL，表示接到此信号后的动作是系统默认动佄1�7
-    - 函数地址，在信号发生时，传��该信号给这个函数并调用，我们称这种处理为��捕捉��该信号
-signal的返回��是指向之前的信号处理程序的指针,或��SIG_ERR
+signo参数是信号名，func的值是常量SIG_IGN、常量SIG_DFL或当接到此信号后要调用的函数的地址
+    - SIG_IGN，向内核表示忽略此信号（记住有两个信号SIGKILL和SIGSTOP不能忽略）
+    - SIG_DFL，表示接到此信号后的动作是系统默认动作
+    - 函数地址，在信号发生时，传递该信号给这个函数并调用，我们称这种处理为“捕捉”该信号
+signal的返回值是指向之前的信号处理程序的指针,或者SIG_ERR
 
-- kill()函数＄1�7
+- kill()函数：
 <script type="preformatted">
 ~~~~~~~~~ C++
 #include <sys/types.h>
@@ -727,16 +728,15 @@ int kill(pid_t pid, int sig);
 ~~~~~~~~~
 </script>
 
-    - pid参数
-
-        - pid大于零时，pid是信号欲送往的进程的标识〄1�7
-        - pid等于零时，sig信号将��往扢�有与调用kill()的那个进程属同一个使用组的进程��1�7
-        - pid等于-1时，sig信号将��往扢�有调用进程有权给其发送信号的进程，除了进稄1�71(init)〄1�7
-        - pid小于-1时，sig信号将��往仄1�7-pid为组标识的进程��1�7
-成功执行时，返回0。失败返囄1�7-1
+pid参数
+    - pid大于零时，pid是信号欲送往的进程的标识。s
+    - pid等于零时，sig信号将送往所有与调用kill()的那个进程属同一个使用组的进程。
+    - pid等于-1时，sig信号将送往所有调用进程有权给其发送信号的进程，除了进程1(init)。
+    - pid小于-1时，sig信号将送往以-pid为组标识的进程。
+成功执行时，返回0。失败返回-1
 
 ### 代码完成
-- 方法1：利用信号处理函敄1�7
+- 方法1：利用信号处理函数
 <script type="preformatted">
 ~~~~~~~~~~ C++
 #include <stdio.h>
@@ -788,10 +788,10 @@ int main()
 
     for (i = 0 ; i < 10 ; i++) {
 
-        // fork()有两个进程返回��1�7
+        // fork()有两个进程返回值
         pid = fork();
         if (pid < 0) {
-            printf("创建子进程失贄1�7!\n");
+            printf("创建子进程失败!\n");
             exit(EXIT_FAILURE);
         }
         // 如果当前为子进程
@@ -816,9 +816,9 @@ int main()
 
 ![](./pic/4-4.png)
 
-杢�死父进程的时候，扢�有子进程也成功杀歄1�7
+杀死父进程的时候，所有子进程也成功杀死
 
-注意在子进程中加入下述信号控制代码很重要，原因在于防止��归监听信号＄1�7
+注意在子进程中加入下述信号控制代码很重要，原因在于防止递归监听信号：
 ~~~~~~ C++
 signal(SIGCHLD, SIG_DFL);
 signal(SIGTERM, SIG_DFL);
@@ -826,8 +826,8 @@ signal(SIGINT, SIG_DFL);
 signal(SIGHUP, SIG_DFL);
 ~~~~~~
 
-- 方法2＄1�7
-在子进程中加入`prctl(PR_SET_PDEATHSIG, SIGTERM)`，使系统在父进程死亡时，向所有子进程发��`SIGTERM`以终止他仄1�7
+- 方法2：
+在子进程中加入`prctl(PR_SET_PDEATHSIG, SIGTERM)`，使系统在父进程死亡时，向所有子进程发送`SIGTERM`以终止他们
 <script type="preformatted">
 ~~~~~~~~~~ C++
 #include <stdio.h>
@@ -876,10 +876,10 @@ int main()
 
     for (i = 0 ; i < 10 ; i++) {
 
-        // fork()有两个进程返回��1�7
+        // fork()有两个进程返回值
         pid = fork();
         if (pid < 0) {
-            printf("创建子进程失贄1�7!\n");
+            printf("创建子进程失败!\n");
             exit(EXIT_FAILURE);
         }
         // 如果当前为子进程
@@ -958,7 +958,7 @@ int main(int argc, char **argv)
 
         pid = fork();
         if (pid < 0) {
-            printf("父进程分裂失贄1�7!\n");
+            printf("父进程分裂失败!\n");
             break;
             // exit(EXIT_FAILURE);
         }
@@ -967,10 +967,10 @@ int main(int argc, char **argv)
             exit(EXIT_SUCCESS);
         }
         if(i % 100 == 0)
-            printf("已分裄1�7%d个子进程\n", i);
+            printf("已分裂%d个子进程\n", i);
     }
 
-    printf("总计分裂亄1�7 %d 个子进程\n", i);
+    printf("总计分裂了 %d 个子进程\n", i);
 
     while(1)
         sleep(1000);
@@ -983,26 +983,26 @@ int main(int argc, char **argv)
 ## 实验步骤
 
 ### 基础极限测试
-首先将虚拟机分别设置512MB＄1�71024MB＄1�72048MB
+首先将虚拟机分别设置512MB，1024MB，2048MB
 
 ![](./pic/5-1.png)
 
-运行程序，在512MB＄1�71024MB＄1�72048MB运行结果分别如下
+运行程序，在512MB，1024MB，2048MB运行结果分别如下
 
 ![](./pic/5-2.png) ![](./pic/5-3.png) ![](./pic/5-4.png) 
 
 ### 将申请内存扩大的极限测试
-射1�7#define str_len 1024 改为#define str_len 10240＄1�7 重新进行测试
+将#define str_len 1024 改为#define str_len 10240， 重新进行测试
 
 ![](./pic/5-2.png) ![](./pic/5-3.png) ![](./pic/5-4.png) 
 
 每个进程申请的空间扩大十倍，但发现可建立的子进程数量几乎没有变化，因此系统允许最大进程数仅与内存大小无关
 
 ### 等待极限测试
-由于系统允许朢�大进程数有限制，因此利用其他程序结束后再分裂的策略，使能分类更多的子进程
-因此，当尝试申请进程失败时，不直接exit错误代码，��是等待wait()后，再次尝试申请
+由于系统允许最大进程数有限制，因此利用其他程序结束后再分裂的策略，使能分类更多的子进程
+因此，当尝试申请进程失败时，不直接exit错误代码，而是等待wait()后，再次尝试申请
 
-wait()函数：进程一旦调用了 wait，就立即阻塞自己，由wait自动分析是否当前进程的某个子进程已经逢�出，如果让它找到了这样一个已经变成僵尸的子进程，wait 就会收集这个子进程的信息＄1�7 并把它彻底销毁后返回；如果没有找到这样一个子进程，wait就会丢�直阻塞在这里，直到有丢�个出现为歄1�7
+wait()函数：进程一旦调用了 wait，就立即阻塞自己，由wait自动分析是否当前进程的某个子进程已经退出，如果让它找到了这样一个已经变成僵尸的子进程，wait 就会收集这个子进程的信息， 并把它彻底销毁后返回；如果没有找到这样一个子进程，wait就会一直阻塞在这里，直到有一个出现为止
 <script type="preformatted">
 ~~~~~~~~ C++
 #include<sys/types.h>
@@ -1011,12 +1011,12 @@ pid_t wait (int * status);
 ~~~~~~~~
 </script>
 
-wait()会暂时停止目前进程的执行，直到有信号来到或子进程结束。如果在调用wait()时子进程已经结束，则wait()会立即返回子进程结束状������1�7
-**子进程的结束状����1�7**会由参数**status**返回，��子进程PID也会丢�并返回��如果不在意结束状����，则参数status 可以设成NULL
-返回：如果执行成功则返回子进程PID，如果有错误发生则返囄1�7-1。失败原因存于errno 中��1�7
+wait()会暂时停止目前进程的执行，直到有信号来到或子进程结束。如果在调用wait()时子进程已经结束，则wait()会立即返回子进程结束状态值。
+**子进程的结束状态值**会由参数**status**返回，而子进程PID也会一并返回。如果不在意结束状态值，则参数status 可以设成NULL
+返回：如果执行成功则返回子进程PID，如果有错误发生则返回-1。失败原因存于errno 中。
 
-**注意本题子进程睡眄1�720s太坑..改成2s节约时间 = =**
-代码＄1�7
+**注意本题子进程睡眠20s太坑..改成2s节约时间 = =**
+代码：
 <script type="preformatted">
 ~~~~~~~~~ C++
 #include <stdio.h>
@@ -1069,7 +1069,7 @@ int main(int argc, char **argv)
         pid = fork();
         if (pid < 0) {
 
-            printf("父进程分裂失败，尝试等待后再次申请进稄1�7!\n");
+            printf("父进程分裂失败，尝试等待后再次申请进程!\n");
             wait(&status);
             i --;
             continue;
@@ -1083,10 +1083,10 @@ int main(int argc, char **argv)
         max_pid = max_pid > pid ? max_pid : pid;
         
         if(i % 100 == 0)
-            printf("已分裄1�7%d个子进程，当前最大pid丄1�7%d\n", i, max_pid);
+            printf("已分裂%d个子进程，当前最大pid为%d\n", i, max_pid);
     }
 
-    printf("总计分裂亄1�7 %d 个子进程\n", i);
+    printf("总计分裂了 %d 个子进程\n", i);
 
     while(1)
         sleep(1000);
@@ -1096,30 +1096,30 @@ int main(int argc, char **argv)
 ~~~~~~~~~
 </script>
 
-查看结果，设置内存仅丄1�7512MB时，通过等待结束—��分配策略，成功申请100000个子进程
+查看结果，设置内存仅为512MB时，通过等待结束——分配策略，成功申请100000个子进程
 ![](./pic/5-5.png)
-通过`ps l f -C test5-2` 查看朢�后仅剄1�7 父进稄1�7
+通过`ps l f -C test5-2` 查看最后仅剩 父进程
 ![](./pic/5-6.png)
 
 ## 守护进程回收子进程并计数
 waitpid()函数
 <script type="preformatted">
 ~~~~~~~~~ C++
-#include <sys/types.h> /* 提供类型pid_t的定乄1�7 */
+#include <sys/types.h> /* 提供类型pid_t的定义 */
 #include <sys/wait.h>
 pid_t waitpid(pid_t pid,int *status,int options)
 ~~~~~~~~~
 </script>
-- pid参数＄1�7
-    - pid > 0: 只等待进程ID等于pid的子进程，不管其它已经有多少子进程运行结束���出了，只要指定的子进程还没有结束，waitpid就会丢�直等下去
-    - pid = -1: 等待任何丢�个子进程逢�出，没有任何限制，此时waitpid和wait的作用一模一样��1�7
-    - pid = 0: 等待同一个进程组中的任何子进程，如果子进程已经加入了别的进程组，waitpid不会对它做任何理睬��1�7
-    - pid < -1: 等待丢�个指定进程组中的任何子进程，这个进程组的ID等于pid的绝对����1�7
-- options参数：目前在Linux中只支持WNOHANG, 表示没有子进程���出，它也会立即返回，不会像wait那样永远等下厄1�7
+- pid参数：
+    - pid > 0: 只等待进程ID等于pid的子进程，不管其它已经有多少子进程运行结束退出了，只要指定的子进程还没有结束，waitpid就会一直等下去
+    - pid = -1: 等待任何一个子进程退出，没有任何限制，此时waitpid和wait的作用一模一样。
+    - pid = 0: 等待同一个进程组中的任何子进程，如果子进程已经加入了别的进程组，waitpid不会对它做任何理睬。
+    - pid < -1: 等待一个指定进程组中的任何子进程，这个进程组的ID等于pid的绝对值。
+- options参数：目前在Linux中只支持WNOHANG, 表示没有子进程退出，它也会立即返回，不会像wait那样永远等下去
 - 返回值：
-    - 当正常返回的时��，waitpid返回收集到的子进程的进程ID
-    - 如果设置了��项WNOHANG，��调用中waitpid发现没有已���出的子进程可收集，则返回0
-    - 如果调用中出错，则返囄1�7-1，这时errno会被设置成相应的值以指示错误扢�圄1�7
+    - 当正常返回的时候，waitpid返回收集到的子进程的进程ID
+    - 如果设置了选项WNOHANG，而调用中waitpid发现没有已退出的子进程可收集，则返回0
+    - 如果调用中出错，则返回-1，这时errno会被设置成相应的值以指示错误所在
 
 ## 代码
 <script type="preformatted">
@@ -1147,8 +1147,8 @@ void printResult(int sig)
 {
     if(getpid() == father_pid){
         printf("~~~~~~~~~~~~~~~~~~~~~~\n");
-        printf("总计分裂亄1�7 %d 个子进程\n", ctr_p);
-        printf("朢�大pid丄1�7%d\n",max_pid);
+        printf("总计分裂了 %d 个子进程\n", ctr_p);
+        printf("最大pid为%d\n",max_pid);
         printf("申请数为: %d, 回收数为: %d\n", ctr_rqt, ctr_rcy);
         printf("~~~~~~~~~~~~~~~~~~~~~~\n");
         exit(EXIT_SUCCESS);
@@ -1200,7 +1200,7 @@ int main(int argc, char **argv)
     for (ctr_p = 0 ; ctr_p < k ; ctr_p++) {
         pid = fork();
         if (pid < 0) {
-            printf("父进程分裂失败，尝试等待后再次申请进稄1�7!\n");
+            printf("父进程分裂失败，尝试等待后再次申请进程!\n");
             sleep(5);
             ctr_p --;
             continue;
@@ -1214,7 +1214,7 @@ int main(int argc, char **argv)
         max_pid = max_pid > pid ? max_pid : pid;
         
         if(ctr_p % 100 == 0)
-            printf("已分裄1�7%d个子进程，当前最大pid丄1�7%d，当前申评1�7%d个进程，回收%d个进程\n", ctr_p, max_pid, ctr_rqt, ctr_rcy);
+            printf("已分裂%d个子进程，当前最大pid为%d，当前申请%d个进程，回收%d个进程\n", ctr_p, max_pid, ctr_rqt, ctr_rcy);
     }
 
     // wait the sub process to end
@@ -1230,10 +1230,10 @@ int main(int argc, char **argv)
 
 ![](./pic/5-7.png)
 
-如图扢�示，申请内存数与释放内存数相各1�7
-程序说明＄1�7
+如图所示，申请内存数与释放内存数相同
+程序说明：
 
-- 子程序段childProcess中，丢�下代码并不能很好的阻止signal递归调用
+- 子程序段childProcess中，一下代码并不能很好的阻止signal递归调用
 ~~~~~~~~~~~~~~ C++
 signal(SIGCHLD, SIG_DFL);
 signal(SIGTERM, SIG_DFL);
@@ -1241,15 +1241,15 @@ signal(SIGINT, SIG_DFL);
 signal(SIGHUP, SIG_DFL);
 ~~~~~~~~~~~~~~
 原因是父程序在fork()出一个子程序后，若在执行上述signal信号设置之前，有CTRL+C的中断命令使其他子程序停止，则当前最先fork()出的子程序仍然会监听信号
-因此朢�好的解决办法为在监听interupt的程序中加入，判断是否为父进程的ip 
+因此最好的解决办法为在监听interupt的程序中加入，判断是否为父进程的ip 
 
-- waitpid(-1,xxxx,xxx)的机理类似于wait，因此直到接收一个SIGCHLD信号，才会执行下面的语句，��等待信号阶段成为阻塞��，**注意!**执行signal()函数的并非父进程也非子进程，应该为system系统中的某个进程执行，此外程序中出现的`while(1)`可以认为是一种默认，避免了大量SIGCHLD信号不被忽略而没有被系统接收到的丢�种做泄1�7
+- waitpid(-1,xxxx,xxx)的机理类似于wait，因此直到接收一个SIGCHLD信号，才会执行下面的语句，而等待信号阶段成为阻塞态，**注意!**执行signal()函数的并非父进程也非子进程，应该为system系统中的某个进程执行，此外程序中出现的`while(1)`可以认为是一种默认，避免了大量SIGCHLD信号不被忽略而没有被系统接收到的一种做法
 
 
 
-<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="markdeep.min.js"></script>
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="../lib/markdeep.min.js"></script>
 
-<script src="jquery-3.3.1.min.js"></script>
+<script src="../lib/jquery-3.3.1.min.js"></script>
 
 <script type="text/javascript">
     $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
