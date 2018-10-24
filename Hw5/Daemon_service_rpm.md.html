@@ -1,0 +1,779 @@
+<meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
+
+**rpm安装包及service文件的使用**
+    1651574 贾昊霖
+
+# 程序编写及说明
+## 代码
+### test.cpp 
+本程序为test主函数及其它函数
+<script type="preformatted">
+~~~~~~~~~ C++
+#include "test.h"
+
+priority_queue<int, vector<int>, greater<int> >pQ;
+
+SubProcess *sp[30];
+int* ctr_subprocess;
+int MaxSubProcess;
+
+
+char **new_environ, **new_argv;
+int len_env;
+
+void SetShortName(int no, int argc, char** argv)
+{
+    if (no != 0)
+        sprintf(argv[0],"./test [%s]",sp[no]->name);
+    else
+        sprintf(argv[0],"./test [main]");
+    prctl(PR_SET_NAME, argv[0]);
+    // cout<<"short name"<< argv[0]<<endl;
+
+    // stringstream tmp;
+
+    // if(no != -1)
+    //     // tmp << new_argv[0] <<" ["<<sp[no]->name<<"]";    
+    //     tmp << "./test" <<" "<<sp[no]->name<<"]";    
+    // else
+    //     tmp << new_argv[0] <<" [main]";
+    // tmp >>argv[0];
+
+    // prctl(PR_SET_NAME, argv[0]);
+}
+
+void SetLongName(int no, int argc, char** argv)
+{
+    if(no != 0)
+        sprintf(argv[0],"./test [%s %s]", sp[no]->name, sp[no]->timeString);
+    else
+        sprintf(argv[0],"./test [main %s]", sp[no]->timeString);
+
+    // cout<<"long name"<< argv[0]<<endl;
+    // stringstream tmp;
+    // char tmp_show_long[100];
+    // tmp << "./test ["<<sp[no]->name<<" "<<sp[no]->timeString<<"]";
+    // tmp >> argv[0];
+}
+
+void RespondKill(int sig)
+{
+    pid_t pid;
+
+    while( (pid = waitpid(-1, NULL, WNOHANG)) > 0 ) {
+        (*ctr_subprocess)--;
+        int findNo = -1;
+        for(int i=1 ; i<=MaxSubProcess ; i++)
+            if(sp[i]->pid == pid){
+                findNo = i;
+                break;
+            }
+
+        if (findNo == -1){
+            cerr<<"find pid ERROR!"<<endl;
+            exit(-1);
+        }
+        pQ.push(findNo);
+        sp[findNo]->Reset();
+    }
+    return;
+}
+
+void RestoreProcessSpace(int argc, char** argv)
+{
+    stringstream tmp;
+    for(int i=0; i<argc; i++){
+        tmp << new_argv[i];
+        tmp >> argv[i];
+    }
+    for(int i=0; i < len_env ; i++){
+        tmp << new_environ[i];
+        tmp >> environ[i];
+    }
+}
+
+void BackUpProcessSpace(int argc, char** argv)
+{
+    for (int i = 0; i < argc; i++)
+        new_argv[i] = strdup(argv[i]);
+
+    len_env = sizeof(*environ) / sizeof(**environ);
+    if (environ) {
+        unsigned int i = -1;
+        while (environ[++i])
+            new_environ[i] = strdup(environ[i]);
+    }
+}
+
+void Init(int argc, char** argv)
+{
+    new_environ = new char*[100];
+    new_argv = new char*[100];
+    // BackUpProcessSpace(argc, argv);
+    // RestoreProcessSpace(argc, argv);
+
+    for(int i=1 ; i<=MaxSubProcess ; i++)
+        pQ.push(i);
+
+    int shmID[30], ctrID;
+
+    ctrID = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT|0600);
+    if(ctrID < 0){
+        cerr<<"get shared memory ID ERROR"<<endl;
+        exit(-1);
+    }
+    ctr_subprocess = (int*)shmat(ctrID, NULL, 0);
+
+    for(int i=0 ; i<=MaxSubProcess ; i++){
+        shmID[i] = shmget(IPC_PRIVATE, sizeof(SubProcess), IPC_CREAT|0600);
+        if(shmID[i] < 0){
+            cerr<<"get shared memory ID ERROR"<<endl;
+            exit(-1);
+        }
+        sp[i] = (SubProcess*)shmat(shmID[i], NULL, 0);
+        sp[i]->Reset();
+    }
+}
+
+int SelectSubNo()
+{
+    if(pQ.empty()){
+        cerr<<"Runtime ERROR!"<<endl;
+        exit(-1);
+    }
+    int rtn = pQ.top();
+    pQ.pop();
+    return rtn;
+}
+
+
+void SubprocessFunc(int no, int argc, char** argv)
+{
+    prctl(PR_SET_PDEATHSIG, SIGTERM);
+    (*ctr_subprocess)++;
+    sp[no]->SetName(no);
+    sp[no]->pid = getpid();
+
+    SetShortName(no, argc, argv);
+    while(true){
+        SetLongName(no, argc, argv);
+        sleep(1);
+        sp[no]->RefreshRunTime();
+    }
+}
+void MainprocessFunc(int no, int argc, char** argv)
+{
+    SetLongName(0, argc, argv);
+    sp[0]->RefreshRunTime();
+}
+
+int main(int argc, char **argv)
+{
+    pid_t pid,ppid;
+
+    pid = fork();
+
+    if (pid < 0) {
+        cerr<<"Create subprocess ERROR!\n";
+        exit(EXIT_FAILURE);
+    }
+    else if (pid > 0) {
+        cerr<< "daemon process create success!\n";
+        exit(EXIT_SUCCESS);
+    }
+    umask(0);
+    chdir("/");
+
+    MaxSubProcess = ReadFile(path);
+    Init(argc, argv);
+    if(MaxSubProcess > 30){
+        cerr<<"the maximal number of the proces is overflowed!"<<endl;
+        exit(-1);
+    }
+
+    signal(SIGCHLD, &RespondKill);
+
+    SetShortName(0, argc, argv);
+
+    while(true){
+        while((*ctr_subprocess) != MaxSubProcess){
+            int no = SelectSubNo();
+            pid = fork();
+            if(pid < 0){
+                cerr<<"Create new subprocess error!"<<endl;
+                exit(-1);
+            }
+            if(pid == 0){
+                SubprocessFunc(no, argc, argv);
+                exit(0);
+            }
+            if (pid > 0){
+                MainprocessFunc(0, argc, argv);
+            }
+            sleep(1);
+        }
+        MainprocessFunc(0, argc, argv);
+        sleep(1);
+    }
+    return 0;
+}
+~~~~~~~~~
+</script>
+
+### readconfig.cpp
+本程序文件为读配置文件
+<script type="preformatted">
+~~~~~~~~~ C++
+#include <fstream>
+#include "test.h"
+
+int ReadFile(const char * path)
+{
+    ifstream infile(path, ios::in);
+    if(infile == NULL){
+        cerr<<"file cannot open!\n";
+        exit(-1);
+    }
+    char buff[100];
+    int num;
+    while(infile.getline(buff,100)){
+        if(strlen(buff) <= 11)
+            num = 5;
+        else{
+            strcpy(buff,buff+11);
+            num = atoi(buff);
+        }
+    }
+    return num;
+}
+~~~~~~~~~
+</script>
+
+### SubProcess.cpp
+本程序为进程封装的类
+<script type="preformatted">
+~~~~~~~~~ C++
+#include "test.h"
+
+void MyInt2String(int no, char *s, int flag)   //*s ->*&s
+{
+    stringstream tmp;
+    int i = 0, len;
+    do{
+        s[i] = no % flag + '0';
+        no /= flag;
+        i++;
+    }while(no != 0);
+    s[i] = '\0';
+    len = strlen(s);
+    for(i=0 ; i<len/2 ; i++){
+        char t = s[i];
+        s[i] = s[len-1-i];
+        s[len-i-1] = t;
+    }
+    tmp << setw(2) << setfill('0') << s;
+    tmp >> s;
+}
+
+struct MTime{
+    char hour[4];
+    char min[4];
+    char sec[4];
+    MTime(int h=0, int m=0, int s=0){
+        MyInt2String(h, hour, 10);
+        MyInt2String(m, min, 10);
+        MyInt2String(s, sec, 10);
+    }
+};
+
+void SubProcess::Reset(){
+    pid = 0;
+    runtime = 0;
+    timeString[0] = name[0] = '\0';
+    RefreshtimeString();
+}
+
+void SubProcess::SetName(int no){
+    char no_s[50];
+    MyInt2String(no,no_s,10);
+    // cout<<"no_s:"<<no_s<<endl;
+    strcpy(this->name, SUB);
+    strcat(this->name, "-");
+    strcat(this->name, no_s);
+}
+
+void SubProcess::RefreshRunTime(){
+    this->runtime ++;
+    this->RefreshtimeString();
+}
+void SubProcess::RefreshtimeString(){
+    MTime mt = MTime(this->runtime/3600, this->runtime / 60 % 60, this->runtime % 60);
+    strcpy(timeString, mt.hour);
+    strcat(timeString, ":");
+    strcat(timeString, mt.min);
+    strcat(timeString, ":");
+    strcat(timeString, mt.sec);
+}
+~~~~~~~~~
+</script>
+
+### test.h
+本程序文件为工程所需的头文件
+<script type="preformatted">
+~~~~~~~~~ C++
+#pragma once
+// #ifndef _test_h
+// #define _test_h 
+
+#include <iostream>
+#include <stdio.h>
+#include <iomanip>
+#include <sstream>
+#include <algorithm>
+#include <functional>
+#include <vector>
+#include <set>
+#include <cstring>
+#include <queue>
+#include <unistd.h>
+#include <cstdlib>
+#include <ctime>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <sys/prctl.h>
+#include <sys/ipc.h> 
+#include <sys/shm.h> 
+using namespace std;
+
+
+class SubProcess{
+public:
+    int runtime;
+    int pid;
+    char timeString[50];
+    char name[10];
+
+    void RefreshRunTime();
+    void RefreshtimeString();
+    void SetName(int no);
+    void Reset();
+};
+
+extern priority_queue<int, vector<int>, greater<int> >pQ;
+extern int *ctr_subprocess;
+extern int MaxSubProcess;
+extern char** environ;
+
+
+const char SUB[4] = "sub";
+const char path[50]="/etc/1651574.conf";
+
+int ReadFile(const char*);
+
+// #endif
+~~~~~~~~~
+</script>
+!!! WARNING: Note
+    1. 注意头文件中的extern，由于每个.cpp都会包含这个头文件，因此如果在该头文件中声明全局变量则会被包含很多次，因此高效的方法是在各自的程序文件中定义全局变量，在头文件中用extern声明。
+
+    2. 全局常量可以直接在头文件中定义
+    
+    3. 类的定义如果涉及体内实现，则要放到头文件中，反之，可以放入.cpp中
+
+### makefile的编写
+此处给出完整版
+<script type="preformatted">
+~~~~~~~~~ makefile
+SRC = test SubProcess
+OBJ = $(addsuffix .o,$(SRC))
+TARGET = test
+
+CC = g++
+CFLAGS_LIB := -shared -fPIC
+CFLAGS_LIB_SELFPATH := -Wl,-rpath=.
+CFLAGS_v = -std=c++14
+
+ifeq ($(PREFIX),)
+	PREFIX := /usr
+endif
+
+main: $(TARGET)
+# main: $(TARGET)_local
+
+$(TARGET): $(OBJ) lib1651574.so test.h 
+	$(CC) -L. -l1651574 -o $@ $(OBJ)
+
+$(TARGET)_local: $(OBJ) lib1651574.so test.h 	# enable to run under current direcory
+	$(CC) -L. -l1651574 $(CFLAGS_LIB_SELFPATH) -o $@ $(OBJ)
+
+SubProcess.o: SubProcess.cpp test.h
+	$(CC) -c SubProcess.cpp -o SubProcess.o
+
+test.o: test.cpp test.h
+	$(CC) -c test.cpp -o test.o
+
+lib1651574.so : readconfig.cpp
+	$(CC) $(CFLAGS_LIB) -o $@ $^
+
+
+
+.PHONY: clean
+clean:
+	$(RM) *.o $(TARGET) lib1651574.so $(TARGET)_local *.rpm
+
+.PHONY : rpm
+rpm : clean
+	mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+	yes | cp -rf ./* ~/rpmbuild/BUILD/	# with yes pip, to send `yes` response to the `cp -f` enforcing instruction
+	rpmbuild -ba ./test-1651574.spec
+	yes | cp -f ~/rpmbuild/RPMS/x86_64/test-1651574-1.0.0-1.el7.centos.x86_64.rpm ./test-1651574.rpm
+
+
+# if the program don't specify the $(DESTDIR), which means `make` instruction is not from the *.spec file, the value of $(DESTDIR) will be NULL
+.PHONY: install
+install: $(TARGET) 
+	install -d $(DESTDIR)$(PREFIX)/lib64
+	install ./lib1651574.so $(DESTDIR)$(PREFIX)/lib64/
+
+	install -d $(DESTDIR)$(PREFIX)/sbin
+	install ./test $(DESTDIR)$(PREFIX)/sbin/test-1651574
+
+	install -d $(DESTDIR)$(PREFIX)/1651574
+	install ./1651574.dat $(DESTDIR)$(PREFIX)/1651574/
+
+	install -d $(DESTDIR)/etc
+	install ./1651574.conf $(DESTDIR)/etc/
+
+	install -d $(DESTDIR)$(PREFIX)/lib/systemd/system
+
+	install ./test-1651574.service $(DESTDIR)$(PREFIX)/lib/systemd/system/
+
+
+.PHONY: uninstall
+uninstall: clean
+	$(RM) $(DESTDIR)$(PREFIX)/lib64/lib1651574.so
+
+	$(RM) $(DESTDIR)$(PREFIX)/sbin/test-1651574 
+
+	$(RM) $(DESTDIR)$(PREFIX)/1651574/1651574.dat 
+
+	$(RM) $(DESTDIR)/etc/1651574.conf
+
+	$(RM) $(DESTDIR)$(PREFIX)/lib/systemd/system/test-1651574.service
+
+	$(RM) ~/rpmbuild/RPMS/x86_64/test-1651574-1.0.0-1.el7.centos.x86_64.rpm
+	$(RM) ~/rpmbuild/SRPMS/test-1651574-1.0.0-1.el7.centos.src.rpm
+	$(RM) ~/rpmbuild/BUILD/*
+
+	# conditional delete
+	if [ "`ls -A /usr/1651574`" = "" ]; then `rm -rf /usr/1651574`;fi;
+~~~~~~~~~
+</script>
+有几个需要注意的地方
+
+- `install` 指令与cp类似，经常用在安装操作中替换`cp`，`install -d`命令为创建目录
+
+- 可以通过注释`main`来选择生成指向不同路径的动态链接库的可执行文件
+    - `CFLAGS_LIB := -shared -fPIC` 这个编译附加选项用来生成动态链接库，生成最后的可执行文件后需要将动态链接库放入`\usr\lib64`目录下
+
+    - `CFLAGS_LIB_SELFPATH := -Wl,-rpath=.`而此编译附加选项，放到生成可执行文件的编译指令中，可以使运行的可执行文件，指向`rpath`对应的目录(此为当前目录)下
+
+- `make install` 为将当前目录下的相关文件放入指定目录的操作，由于如果$(DESTDIR) 不指定（可由`.spec`文件调用指定），则为空。
+
+- `make uninstall` 同理
+
+- $(RM) $(RMDIR) 可以强制删除文件、文件夹，不询问
+
+- `make rpm` 操作流程
+    - 创建rpmbuild所需路径
+
+    - 将clean后的当前目录下所有文件拷贝到`~/rombuild/BUILD/`目录下
+
+    - 通过`rpmbuild -ba ./test-1651574.spec`依据.spec构建源代码和二进制软件包，构建过程在后面详细叙述
+
+- 其余需要说明的，已经在makefile中用英文注释标注
+
+## 运行过程及结果
+
+`make install` 后运行`./test`
+
+![](./pic/program-1.png)
+
+随机杀死进程，并通过ps指令观察结果
+
+![](./pic/program-2.png) ![](./pic/program-3.png)
+
+杀死父进程，整个程序结束
+
+![](./pic/program-4.png)
+
+通过`ps -ef | grep test` 观察结果
+
+![](./pic/program-5.png)
+
+随机杀死两个子进程，继续观察结果
+
+![](./pic/program-7.png)
+
+# service 的编写
+这个service的编写，个人比较晕..
+## service 服务文件的编写
+**[Unit]** 片段说明了服务的的大致信息和依赖情况
+
+**[Service]** 片段说明了服务具体的运行方法。
+
+    - Type 字段制定了为forking，让system去把test的子进程当作主进程来监控，监控主要影响的是stop,restart。
+
+    - ExecStart 字段规定程序start的时候应该做什么，它主要影响start
+
+    - Restart 字段让主程序不能被kill彻底杀死，只能用systemctl stop停止
+
+**[Install]** 片段说明程序是多用户目标
+
+.service的编写如下
+~~~~~~~ 
+[Unit]
+Description = ShenJian homework
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/test-1651574
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+~~~~~~~
+
+`.service`程序编写完成，放到`/usr/lib/systemd/system` 目录下
+
+## service运行结果
+enable 开机自启动服务，并用status查看状态
+
+![](./pic/service-1.png)
+
+disable 取消开机启动，并用status查看状态
+
+![](./pic/service-2.png)
+
+start 开启服务，查看后台进程
+
+![](./pic/service-3.png)
+
+通过status查看服务状态
+
+![](./pic/service-4.png)
+
+stop 停止服务，并查看后台进程，与status服务状态
+
+![](./pic/service-5.png)
+
+retart 重启服务，观察后台进程重新启动
+
+![](./pic/service-6.png)
+
+# RPM包的制作
+[学习网站](https://blog.csdn.net/get_set/article/details/53453320)
+
+## RPM简要介绍
+
+RPM包有两种：二进制包和源码包，二进制包为编译好的二进制可执行文件，在安装过程中不需要再次编译，比较方便
+但是我选择后一种，需要利用makefile进行编译后安装
+
+此外我们需要写一个.spec文件来指挥rpmbuild制作rpm包
+
+## .spec文件编写
+~~~~~~~~
+Summary: SJHomework-RPM
+Name: test-1651574
+Version: 1.0.0
+Release: 1%{?dist}
+
+License:        GPL
+URL:            https://github.com/Harrypotterrrr     
+BuildRoot: /var/tmp/%{name}-buildroot               # 临时目录
+
+
+%description
+The project is made by jiahaolin.
+I wanna be one girl's daemon, to protect and to love, to hold and to share, but who on earth could tell me how it could be..
+
+%prep       # 编译预处理
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m 工程编译预处理阶段 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+
+%build      # 编译阶段
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m 工程编译阶段 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+make
+
+
+%install    # 安装阶段
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m RPM安装阶段 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+make install DESTDIR=%{buildroot}
+
+%clean      # 清理操作
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m 清理阶段 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+rm -rf %{buildroot}
+
+
+%pre
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m 准备安装 test-1651574 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+
+%post
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m 完成安装 test-1651574 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+
+%preun
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m 准备卸载 test-1651574 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+
+%postun
+rm -fv ~/rpmbuild/BUILD/*
+rm -fv ~/rpmbuild/RPMS/*.rpm
+rm -fv ~/rpmbuild/SRPMS/*.rpm
+echo -e "\e[1;33m ********************** \033[0m"
+echo -e "\e[1;33m 完成卸载 test-1651574 \033[0m"
+echo -e "\e[1;33m ********************** \033[0m"
+
+# rpm -ivh 安装时的文件指定目录
+%files
+%defattr(-,root,root,-)
+# defattr(<文件权限>, <用户>, <用户组>, <目录权限>) - 为默认
+/etc/1651574.conf
+/usr/1651574/1651574.dat
+/usr/lib/systemd/system/test-1651574.service
+/usr/lib64/lib1651574.so 
+/usr/sbin/test-1651574
+
+%changelog
+* Wed Oct 24 2018 Jiahaolin <jiahaolin19971119@126.com> - 1.0
+- Update to 1.0
+~~~~~~~~
+
+## RPM安装详解
+所有的.spec相关模块及介绍网站介绍地很清楚，我只说明我的.spec执行过程
+
+### make rpm的运行过程
+
+执行`make rpm`指令，生成rpm包
+
+程序运行流程如下：
+
+1. 首先makefile中找到rpm
+
+2. 建立rpmbuild所需的目录环境 `~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}`
+
+3. 将当前与makefile同目录下的所有source代码、dat数据文件、config配置文件、service服务文件复制到`~/rpmbuild/BUILD/`目录下
+
+4. 执行rpmbuild命令，读取rpm制作指导书.spec，进入.spec读取文件
+
+5. 进入到.spec文件后首先阅读文件头，包括名称，版本，依赖等
+
+6. 读取rpm制作临时工作目录 BuildRoot -> `/var/tmp/%{name}-buildroot`，注意将临时目录放在`/var/tmp/`这个linux系统缓存目录下
+
+7. prep 预处理阶段，执行编译预处理，为工程打补丁等 
+
+8. build 编译阶段，将源码编译，执行make，注意这个make会再次读取makefile的内容，生成可执行文件
+
+9. install 配置rpm的主要阶段，执行make install DESTDIR=%{buildroot}，注意此时又会返回makefile文件，并**指定变量DESTDIR=buildroot目录**，执行install的内容（make install 流程参见makefile 编写解析），此过程目的在于将BUILD中的内容放入此前指定BuildRoot目录下的对应目录，即配置rpm包的依赖文件
+
+10. 之后系统会根据临时目录，buildroot下的文件，自动封装成rpm包
+
+11. clean 清理阶段，删除临时目录 buildroot
+
+12. 返回makefile文件，将生成的rpm包拷贝到指定目录（当前目录）
+
+!!! Note
+    
+    %files 下所有文件为安装rpm包时，文件的安装目录
+
+## rpmbuild 结果
+
+![](./pic/rpm-1.png) 
+![](./pic/rpm-2.png) 
+![](./pic/rpm-3.png)
+
+## 安装rpm包
+
+用`rpm -ivh test-1651574.rpm` 安装rpm包
+
+![](./pic/rpm-4.png)
+
+验证安装包安装的正确性，开启服务并观察进程
+
+![](./pic/rpm-5.png)
+
+### 卸载rpm包
+
+![](./pic/rpm-6.png)
+
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="../lib/markdeep.min.js"></script>
+
+<script src="../lib/jquery-3.3.1.min.js"></script>
+
+<script type="text/javascript">
+    $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
+</script>
+
+<style>
+    /* .md h2::before{
+        content: counter(h2, lower-alpha)
+    }
+
+    .md h2.notinc::before{
+        counter-increment: none;
+        content: none
+    }
+
+    div.notinc1 h1::before{
+        counter-increment: none;
+        content: "2*"
+    }
+
+    .md h1.notinc::before{
+        counter-increment: none;
+    } */
+
+    .md .image {
+        width: 80%;
+    }
+
+    .md img {
+        border: 1.3px rgb(0, 0, 0) solid;
+    }
+
+    .md div.imagecaption {
+        text-align: center;
+    }
+
+    /* .level2 .tocnumber {
+        display: none
+    } */
+
+    .md code {
+        background-color: rgba(255, 249, 158, 0.788);
+        color: rgb(145, 52, 40);
+    }
+
+    .md pre code {
+        background: none;
+        /* background-color: rgb(250, 238, 224); */
+        /* border: 1.0px rgb(0, 0, 0) solid; */
+    }
+
+    body {
+        font-family: 等线,Palatino,Georgia,"Times New Roman",serif;
+    }
+</style>

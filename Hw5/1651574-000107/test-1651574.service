@@ -1,0 +1,10 @@
+[Unit]
+Description = ShenJian homework
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/test-1651574
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
