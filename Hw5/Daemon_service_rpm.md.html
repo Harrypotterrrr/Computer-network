@@ -546,8 +546,10 @@ WantedBy=multi-user.target
 ~~~~~~~
 
 `.service`程序编写完成，放到`/usr/lib/systemd/system` 目录下
+可能需要`systemctl daemon-reload`指令重新再加service
 
 ## service运行结果
+
 enable 开机自启动服务，并用status查看状态
 
 ![](./pic/service-1.png)
