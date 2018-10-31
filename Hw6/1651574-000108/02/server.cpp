@@ -17,16 +17,18 @@ using namespace std;
 extern int errno;
 char * error_messg;
 
+void myExit(){
+    error_messg = strerror(errno);
+    cerr << error_messg <<endl;
+    exit(EXIT_FAILURE);
+}
+
 int main(int argc,char* argv[])
 {
-    ///定义sockfd
     int server_fd;
 
-    if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-        error_messg = strerror(errno);
-        cerr << error_messg <<endl;
-        exit(EXIT_FAILURE);
-    }
+    if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+        myExit();
 
     // if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0){
     //     error_messg = strerror(errno);
@@ -34,7 +36,6 @@ int main(int argc,char* argv[])
     //     exit(EXIT_FAILURE);
     // }
 
-    ///定义sockaddr_in
     int port = atoi(argv[1]);
 
     struct sockaddr_in serveAddr;
@@ -44,33 +45,29 @@ int main(int argc,char* argv[])
     //设置的端口为INADDR_ANY
     serveAddr.sin_addr.s_addr = htonl(INADDR_ANY);    //  host to unsigned long, INADDR_ANY = 0.0.0.0
 
-    if(bind(server_fd,(struct sockaddr *)&serveAddr,sizeof(serveAddr)) == -1) {
-        error_messg = strerror(errno);
-        cerr << error_messg <<endl;
-        exit(EXIT_FAILURE);
-    }
+    if(bind(server_fd,(struct sockaddr *)&serveAddr,sizeof(serveAddr)) == -1)
+        myExit();
 
-    if(listen(server_fd, QUEUE) == -1) {
-        error_messg = strerror(errno);
-        cerr << error_messg <<endl;
-        exit(EXIT_FAILURE);
-    }
+    if(listen(server_fd, QUEUE) == -1)
+        myExit();
 
-    ///客户端套接字
     int connect_fd;
     char buffer[BUFFER_SIZE];
     struct sockaddr_in client_addr;
     socklen_t len_client_addr = sizeof(client_addr);
 
     
-    ///成功返回非负描述字，出错返回-1
-    if((connect_fd = accept(server_fd, (struct sockaddr*)&client_addr, &len_client_addr)) == -1) {
-        error_messg = strerror(errno);
-        cerr << error_messg <<endl;
-        exit(EXIT_FAILURE);
-    }
-    else
-	    cout<<"connection succeed!"<<endl;
+    if((connect_fd = accept(server_fd, (struct sockaddr*)&client_addr, &len_client_addr)) == -1)
+        myExit();
+    cout<<"connection succeed!"<<endl;
+
+    // if(getpeername(connect_fd, (struct sockaddr*)&client_addr, &len_client_addr) == -1)
+    //     myExit();
+    
+    // cout<<"client IP:"<<inet_ntoa(c.sin_addr)<<"  port:"<<ntohs(c.sin_port)<<endl;
+
+    cout<<"client IP: "<<inet_ntoa(client_addr.sin_addr)<<"\tport: "<<ntohs(client_addr.sin_port)<<endl;
+
         
     while(true) {
         memset(buffer, 0, BUFFER_SIZE);

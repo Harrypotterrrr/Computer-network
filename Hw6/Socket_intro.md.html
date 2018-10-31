@@ -1,0 +1,1017 @@
+<meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
+
+**Socket编程 TCP阻塞方式**
+    1651574 贾昊霖
+
+# 预备工作
+
+为网卡上设置多地址
+
+首先仿照/etc/sysconfig/network-scripts/ifcfg-ens32增加一文件根据网络虚拟接口的名字进行命名，命名为ifcfg-ens32:0
+
+修改文件如下
+
+![](./pic/0-1.png)
+
+观察两台虚拟机的新网卡配置
+
+![](./pic/0-2.png)
+
+两台虚拟机互相ping，均可以正常ping通
+
+![](./pic/0-3.png)
+
+
+# Socket详解
+
+[学习网站](https://www.cnblogs.com/jiangzhaowei/p/8261174.html)
+
+## Socket 概念
+
+Socket是应用层与TCP/IP协议族通信的中间软件抽象层，它是一组接口。
+
+socket起源于Unix，而Unix/Linux基本哲学之一就是“一切皆文件”，都可以用“打开open –> 读写write/read –> 关闭close”模式来操作。Socket就是该模式的一个实现
+
+![](./pic/1-1.png width=500px)
+
+## 套接字描述符
+
+描述符是一个整数，应用程序以该描述符作为传递参数，通过调用函数对文件进行套接字I/O读写操作
+
+## 文件描述符和文件指针的区别
+
+- 文件描述符：每个进程在PCB中保存着一份文件描述符表，**文件描述符就是这个表的索引**，每个表项都有一个指向已打开文件的指针
+
+- 文件指针：C语言中使用文件指针做为I/O的句柄。文件指针指向进程用户区中的一个被称为FILE结构的数据结构
+
+
+## SOCKET连接流程
+
+服务器端先初始化Socket，然后与端口绑定(bind)，对端口进行监听(listen)，调用accept阻塞，等待客户端连接。在这时如果有个客户端初始化一个Socket，然后连接服务器(connect)，如果连接成功，这时客户端与服务器端的连接就建立了。客户端发送数据请求，服务器端接收请求并处理请求，然后把回应数据发送给客户端，客户端读取数据，最后关闭连接，一次交互结束
+
+![](./pic/1-2.png width=430px)
+
+
+## 基本的SOCKET接口函数
+
+[学习网站](http://man7.org/linux/man-pages/index.html)
+
+### socket()函数
+
+建立一个socket
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+int socket(int domain, int type, int protocol);
+~~~~~~~~
+</script>
+
+- domain: 网络通信域，常用 `AF_INET` 为IPv4协议
+
+- type: 套接字通信的类型，常用`SOCKET_STREAM`流式套接字，`SOCK_DGRAM`数据包套接字，前者基于TCP保证数据正确传送到对方，后者基于UDP无保障的面向消息的专门用于局域网，基于广播
+
+- protocol: 常用0
+
+
+### bind()函数
+
+将addr指定的地址分配给文件描述符sockfd引用的套接字。
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+~~~~~~~~
+</script>
+
+- sockfd: socket描述字
+
+- addr: 指向要绑定给sockfd的协议地址，它为一个const struct sockaddr类型的指针，其中IPv4协议的类型如下：
+
+    <script type="preformatted">
+    ~~~~~~~~ C++ linenumbers
+    struct sockaddr_in {
+    sa_family_t    sin_family; /* address family: AF_INET IPv4类型*/
+    in_port_t      sin_port;   /* port in network byte order 绑定端口*/
+    struct in_addr sin_addr;   /* internet address 绑定的ip地址*/
+    };
+
+    /* Internet address. */
+    struct in_addr {
+        uint32_t       s_addr; /* address in network byte order 网络字节序*/
+    };
+    ~~~~~~~~
+    </script>
+
+!!! Tip: INADDR_ANY
+    当sockaddr_in.sin_addr.s_addr 取值为INADDR_ANY的含义:
+
+    INADDR_ANY的值为0.0.0.0，泛指本机的意思，也就是表示本机的所有IP，因为有些PC不止一块网卡，多网卡的情况下，这个就表示**所有**网卡ip地址的意思
+
+    因此当服务端取值为INADDR_ANY时，只要客户端绑定本机任意ip中的一个，便可成功连接
+
+- addrlen: 对应的是地址的长度，通常用sizeof(struct sockaddr_in)
+
+### listen()函数
+
+监听这个socket，被动等待客户的连接请求，这时调用connect()发出连接请求，服务器端就会接收到这个请求，
+
+<script type="preformatted">
+~~~~~~~~ C++
+int listen(int sockfd, int backlog);
+~~~~~~~~
+</script>
+
+- backlog: 最大连接个数
+
+### connect()函数
+
+与客户端进行连接请求
+
+<script type="preformatted">
+~~~~~~~~ C++
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+~~~~~~~~
+</script>
+
+- addr: 指向要连接的服务端地址结构体
+
+- addrlen: 对应的是地址的长度，通常用sizeof(struct sockaddr_in)
+
+### accept()函数
+
+接收客户端连接请求
+
+<script type="preformatted">
+~~~~~~~~ C++
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen); //返回连接connect_fd
+~~~~~~~~
+</script>
+
+- addr: 指向要请求连接的客户端地址结构体
+
+### close()函数
+
+关闭socket描述字，与fclose()类似
+
+## 其他函数
+
+### 捕捉错误
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+extern int errno;
+char * error_messg;
+
+void myExit(){
+    error_messg = strerror(errno);
+    cerr << error_messg <<endl;
+    exit(EXIT_FAILURE);
+}
+~~~~~~~~
+</script>
+
+### 转换函数
+
+#### 将主机序与网络序的转换
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <netinet/in.h>
+uint32_t htonl(uint32_t hostlong);  //  Host to Network Long int  32Bytes
+uint16_t htons(uint16_t hostshort); //  Network to Host  Long int 32Bytes
+uint32_t ntohl(uint32_t netlong);   //  Host to Network Short int 16Bytes
+uint16_t ntohs(uint16_t netshort);  //  Network to Host Short int 16Bytes
+~~~~~~~~
+</script>
+
+#### inet_addr() 
+
+将ip地址字符串转换成`in_addr`类型的32位网络字节序二进制，可以认为ip地址的存储
+
+<script type="preformatted">
+~~~~~~~~ C++
+in_addr inet_addr(const char *cp);
+~~~~~~~~
+</script>
+
+#### inet_ntoa()
+
+将一个32位的网络字节序二进制IPV4地址转换为相应的点分十进制数串，可以认为读取ip地址
+
+<script type="preformatted">
+~~~~~~~~ C++
+char *inet_ntoa(struct in_addr in);
+~~~~~~~~
+</script>
+
+
+
+# Socket编程初步
+
+## 链接错误测试
+
+代码中声明外部变量erron 以及定义错误信息字符串 erron_messg 这样可通过系统错误字典，输出错误信息
+
+<script type="preformatted">
+~~~~~~~~~ C++ linenumbers
+extern int errno;
+char * error_messg;
+erron_messg = strerror(errno);
+cerr << error_messg <<endl;
+~~~~~~~~~
+</script>
+
+### bind() 出错
+
+运行第一次服务端程序并将其放入后台运行，再运行相同程序并尝试绑定相同端口，bind()函数返回错误
+
+报错信息为：`Address already in use`
+
+![](./pic/2-1.png width=340px)
+
+### connect() 出错
+
+当输入不存在的IP地址时，connect()函数返回错误
+
+报错信息为 `Network is unreachable`
+
+当输入不在同一网段的IP地址时，connect()函数返回错误
+
+报错信息为 `Connection refused`
+
+![](./pic/2-2.png width=540px)
+
+## 中断测试
+
+### 用CTRL+C 终止client
+
+server端可以检测到链接中断，并退出
+
+![](./pic/2-3.png)
+
+### 用另一控制台kill client
+
+client端捕捉到被杀死，server端可以检测到连接中断，并退出
+
+![](./pic/2-4.png)
+
+## 用CTRL+C  终止server
+
+server 中断后，client端也当即中断
+
+注意：连接中断后，立即再次绑定相同端口，发现不能再次连接，显示bind()函数出错
+
+![](./pic/2-5.png)
+
+但在一段时间之后，便可以再次连接相同端口，原因在于主动断开连接的一方的系统中, 内核会维持原连接在 TIME_WAIT状态一段时间， 在这段时间内, 这个地址:端口无法被使用
+
+为了解决这个问题，可以在定义socket套接字后，对socket进行设置，加入下面代码
+
+<script type="preformatted">
+~~~~~~~~ C++
+if (setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
+    myExit();
+~~~~~~~~
+</script>
+
+其中SO_REUSEADDR的作用为：可以对一个端口进行多次绑定，一般这个是不支持使用的
+
+但是**注意**：对于监听套接字，让两个套接字在同一个端口上进行监听，那么对于二者谁来ACCEPT，就会出现歧义
+
+## 用另一控制台kill server
+
+server端捕捉到被杀死，client端不可以检测到连接中断
+
+![](./pic/2-6.png)
+
+## 双方连接后再启动一个client
+
+在另一个终端尝试尝试连接server，发现可以连接成功
+
+![](./pic/2-7.png)
+
+
+# Socket配置编程
+
+## 观察随机分配端口号
+通过输出socket_addr结构体的属性，观察client端地址与端口号
+<script type="preformatted">
+~~~~~~~~~~ C++
+cout<<"client IP: "<<inet_ntoa(client_addr.sin_addr)<<"\tport: "<<ntohs(client_addr.sin_port)<<endl;
+~~~~~~~~~~
+</script>
+
+![](./pic/3-1.png)
+
+观察结果，经验证，为系统自动分配
+
+## 输出客户端ip
+除了上述方式直接通过使用getpeername()函数，获取与套接口相连的端地址
+
+<script type="preformatted">
+~~~~~~~ C++ linenumbers
+struct client_addr;
+socklen_t len_client_addr = sizeof(client_addr);
+
+if(getpeername(connect_fd, (struct sockaddr*)&client_addr, &len_client_addr) == -1)
+        myExit();
+
+cout<<"client IP:"<<inet_ntoa(c.sin_addr)<<"port:"<<ntohs(c.sin_port)<<endl;
+~~~~~~~
+</script>
+
+## 固定client端端口号
+
+需要定义一个clientAddr 结构体，并为其设置端口号，最后绑定到client的socket上
+
+<script type="preformatted">
+~~~~~~~ C++ linenumbers
+struct sockaddr_in clientAddr;
+clientAddr.sin_port = htons(port_client);
+
+// use default, not change
+// clientAddr.sin_family = AF_INET;
+// clientAddr.sin_addr.s_addr = inet_addr("192.168.60.231");
+
+if(bind(client_fd,(struct sockaddr *)&clientAddr,sizeof(clientAddr)) == -1)
+    myExit();
+~~~~~~~
+</script>
+
+输入将client端口设置为4005，观察server端，正确
+
+![](./pic/3-2.png)
+
+# Socket编程进阶
+
+## 查找本机所有IP
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+void get_all_local_IP() 
+{
+    int self_fd;
+    char *ip, *buff = new char[BUFFER_SIZE];
+    struct ifconf ifc;
+    
+    ifc.ifc_len = BUFFER_SIZE ;     // the max length of the ifc_buffer
+    ifc.ifc_buf = (caddr_t) buff;
+
+    if ((self_fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+        myExit();
+
+    ioctl(self_fd, SIOCGIFCONF, &ifc);
+    close(self_fd);
+
+    struct ifreq *ifr = (struct ifreq*) buff;
+    int i = ifc.ifc_len / sizeof(struct ifreq); // IMPORTANT: after ioctl, the length of the ifc_buffer will change
+
+    cout << "IP includes:" << endl;
+    for( ; i>0 ; i--, ifr++){
+        ip = inet_ntoa(((struct sockaddr_in*)&(ifr->ifr_addr))->sin_addr);
+        cout << ip << endl;
+    }
+
+    delete buff;
+    return;
+}
+~~~~~~~~~~
+</script>
+
+其中:
+
+加入查询底层设备参数的函数`ioctl()`
+
+<script type="preformatted">
+~~~~~~~~~~ C++
+#include <sys / ioctl.h> 
+int ioctl(int fd ，unsigned long request ，void * pointer);
+~~~~~~~~~~
+</script>
+
+第一个参数为文件描述符，第二个为设备请求码，在查询IP时用的时`SIOCGIFCONF`，第三个参数为指向内存的空指针
+
+因此可以通过socket获取套接字描述符，来反查自己的所有ip地址
+
+运行后获取的结果如下
+
+![](./pic/4-1.png)
+
+## 服务端绑定任意可选IP
+
+与客户端类似，通过`serverAddr.sin_addr.s_addr = inet_addr(ip_server);` 绑定
+
+绑定并输出正确
+
+![](./pic/4-2.png)
+
+## 客户端绑定此前服务端绑定的指定IP
+
+server: ./tcp_server3 170.18.12.230 5000
+
+client: ./tcp_client3 5010 170.18.12.230 5000
+
+结果正确：
+
+![](./pic/4-3.png)
+
+## 客户端绑定未指定的IP
+
+server: ./tcp_server3 170.18.12.230 5000
+
+client: ./tcp_client3 5010 192.168.80.230 5000
+
+观察结果，发现客户端显示“连接拒绝”错误，服务端仍然accept等待挂起
+
+![](./pic/4-4.png)
+
+# Sokcet读写数据函数辨析
+
+## 使用read() 与 write()进行数据传送
+
+read() 从文件描述符读取到buf中，最大长度为count
+<script type="preformatted">
+~~~~~~~~~~ C++
+#include <unistd.h>
+ssize_t read(int fd, void *buf, size_t count);
+~~~~~~~~~~
+</script>
+
+write() 从buff向文件描述符写入，最大长度为count
+
+<script type="preformatted">
+~~~~~~~~~~ C++
+#include <unistd.h>
+ssize_t write(int fd, const void *buf, size_t count);
+~~~~~~~~~~
+</script>
+
+### 服务端接收与反馈的编写
+
+采用 在while(true)循环中使用read()与write()函数
+
+每次循环都用'\0'清空buffer，输出采取putchar()字符输出
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+while(true) {
+    memset(buffer, '\0', BUFFER_SIZE);
+
+    if(read(connect_fd, buffer, MAX_SIZE) == -1)
+        myExit();
+    
+    for(int i=0 ; i<BUFFER_SIZE ; i++)
+        putchar(buffer[i]);
+    putchar('\n');
+    write(connect_fd, buffer, MAX_SIZE);
+}
+~~~~~~~~~~
+</script>
+
+### 不间断地一次传送>=count字节数的消息
+
+count = 20
+客户端采取一次最大20字节写入，从服务端接收字符串并输出
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+while (cin.getline(sendbuff,BUFFER_SIZE)) {
+    if(strcmp(recvbuff,"exit\n")==0)
+        break;
+    write(client_fd, sendbuff, MAX_SIZE); ///发送
+    cout<< "return string: ";
+    read(client_fd, recvbuff, MAX_SIZE); ///接收
+    cout << recvbuff <<endl;
+
+    memset(sendbuff, '\0', BUFFER_SIZE);
+    memset(recvbuff, '\0', BUFFER_SIZE);
+}
+~~~~~~~~~~
+</script>
+
+可以观察到20字节以后的字符串数据在传送过程中被忽略了
+
+![](./pic/5-1.png)
+
+### 每隔1s一次传送2字节数的消息
+
+客户端采取一次写入2字节，利用指针向sendbuff中依次输入，输入满20字节后，再通过write函数从文件描述符中索取返回字符串
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+while (cin.getline(sendbuff,BUFFER_SIZE)) {
+    const int tmp_send_max = 2;
+    if(strcmp(recvbuff,"exit\n")==0)
+        break;
+    for(int i=0 ; i<MAX_SIZE ; i += tmp_send_max){
+        write(client_fd, sendbuff+i, tmp_send_max);
+        sleep(1);  
+    }
+    cout<< "return string: ";
+    read(client_fd, recvbuff, MAX_SIZE);
+    cout << recvbuff <<endl;
+    memset(sendbuff, '\0', BUFFER_SIZE);
+    memset(recvbuff, '\0', BUFFER_SIZE);
+}
+~~~~~~~~~~
+</script>
+
+可以观察到服务端每次接收2个字符并依次输出，等20字节结束后客户端显示返回字符串，同样20字节以后的字符串数据在传送过程中被忽略了
+
+并且更值得关注的是，返回客户端的字符串只有第一次sleep之前的2字节的字符，猜测可能由于write
+
+![](./pic/5-2.png)
+
+如果输入没有20字节，服务端会输出空串(由于初始化buffer="\0")，并换行，共10行
+
+![](./pic/5-3.png)
+
+
+
+## 使用recv() 与 send()进行数据传送
+
+recv() 从文件描述符读取到buf中，最大长度为len
+
+返回接收的字节数
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    ssize_t recv(int sockfd, void *buf, size_t len, int flags);
+~~~~~~~~~~
+</script>
+
+send() 从buff向文件描述符写入，最大长度为len
+
+返回发送的字节数
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    ssize_t send(int sockfd, const void *buf, size_t len, int flags);
+~~~~~~~~~~
+</script>
+
+!!! WARNING: recv()/send() 与 read()/write()的区别
+    区别仅在flags标志位，当flags为0的时候，recv()/send() 与 read()/write()没有区别
+
+使用recv()/send()时，可将flag设置为如下选项：
+
+- MSG_DONTWAIT: 启用非阻塞操作，无论操作是否完成都会立刻返回，需要通过其他方式来判断具体操作是否成功
+
+- MSG_WAITALL: 启用阻塞操作，必须要做完IO 操作（包括错误）才会返回
+
+阻塞和非阻塞的区别在于没有数据到达的时候是否立刻返回
+
+### 服务端接收与反馈的编写
+
+采用 在while(true)循环中使用recv()与send()函数
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+while(true) {
+    memset(buffer, 0, BUFFER_SIZE);
+    if(recv(connect_fd, buffer, MAX_SIZE, 0) == 0)
+        break;
+    else{
+        cout << buffer << endl;
+        send(connect_fd, buffer, MAX_SIZE, 0);
+    }
+}
+~~~~~~~~~~
+</script>
+
+### 不间断地一次传送>=len字节数的消息
+
+len = 20
+客户端采取一次最大20字节写入，从服务端接收字符串并输出
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+while (cin.getline(sendbuff,BUFFER_SIZE)) {
+    if(strcmp(recvbuff,"exit\n")==0)
+        break;
+    send(client_fd, sendbuff, MAX_SIZE,0); ///发送
+    recv(client_fd, recvbuff, MAX_SIZE,0); ///接收
+    cout<< "return string: " << recvbuff <<endl;
+
+    memset(sendbuff, 0, BUFFER_SIZE);
+    memset(recvbuff, 0, BUFFER_SIZE);
+}
+~~~~~~~~~~
+</script>
+
+可以观察到20字节以后的字符串数据在传送过程中被忽略了
+
+![](./pic/5-4.png)
+
+### 每隔1s一次传送2字节数的消息
+
+客户端采取一次写入2字节，利用指针向sendbuff中依次输入，输入满20字节后，再通过write函数从文件描述符中索取返回字符串
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+while (cin.getline(sendbuff,BUFFER_SIZE)) {
+
+    const int tmp_send_max = 2;
+    if(strcmp(recvbuff,"exit\n")==0)
+        break;
+    for(int i=0 ; i<MAX_SIZE ; i += tmp_send_max){
+        send(client_fd, sendbuff+i, MAX_SIZE, 0); ///发送
+        sleep(1);  
+    }
+    recv(client_fd, recvbuff, MAX_SIZE, 0); ///接收
+    cout<< "return string: " << recvbuff <<endl;
+
+    memset(sendbuff, 0, BUFFER_SIZE);
+    memset(recvbuff, 0, BUFFER_SIZE);
+}
+~~~~~~~~~~
+</script>
+
+可以观察到服务端每次接收2个字符并依次输出，等20字节结束后客户端显示返回字符串，同样20字节以后的字符串数据在传送过程中被忽略了
+
+并且更值得关注的是，返回客户端的字符串只有第一次sleep之前的2字节的字符，猜测可能由于write
+![](./pic/5-5.png)
+
+如果输入没有20字节，服务端会输出空串(由于初始化buffer="\0")，并换行，共10行
+
+![](./pic/5-6.png)
+
+## 更改send()与recv()的flag标志位
+
+使函数等待所有字节完成接收或写入后再进行下一步操作
+
+~~~~~~~~~~ C++ linenumbers
+while(true) {
+    memset(buffer, 0, BUFFER_SIZE);
+    if(recv(connect_fd, buffer, MAX_SIZE, WAIT_ALL) == 0)
+        break;
+    else{
+        cout << buffer << endl;
+        send(connect_fd, buffer, MAX_SIZE, WAIT_ALL);
+    }
+}
+~~~~~~~~~~
+</script>
+
+再次重复上一个实验，观察到服务端不再只接收到2个字节的字符就立刻输出，而是等待客户端sleep()结束，即发送数据结束后才执行输出并返回数据操作
+
+![](./pic/5-7.png)
+
+
+
+# Socket读写阻塞测试
+
+## netstat详解
+
+`netstat` 命令用于显示各种网络相关信息，如网络连接，路由表，接口状态 (Interface Statistics)，masquerade 连接，多播成员 (Multicast Memberships) 等等
+
+### 命令选项
+
+- `-a` (all)显示所有选项，默认不显示LISTEN相关
+
+- `-c` 将使 netstat 不断地每秒输出所选的信息
+
+- `-t` (tcp)仅显示tcp相关选项
+
+- `-u` (udp)仅显示udp相关选项
+
+- `-p` 显示建立相关链接的程序名
+
+- `-r` 显示路由信息，路由表
+
+- `-n` 显示数字形式地址而不是去解析主机、端口或用户名
+
+### 输出信息含义
+
+![](./pic/6-1.png)
+
+- Proto: 连接使用的协议
+
+- Recv-Q: 接收缓冲队列，收到的数据在本地接收缓冲中，本地应用未取走的字节数
+
+- Send-Q: 发送缓冲队列，发送的数据在本地发送缓冲中，远端未确认收到的字节数
+
+- Local Address: socket连接的本地地址和端口
+
+- Forign Address: socket连接的对方地址和端口
+
+- State: socket的状态
+
+- PID/Program name: 使用连接的程序的PID和名字
+
+!!! note
+    可以通过中断信号来获取准确的读写字节数
+
+## 客户端写入服务端阻塞测试
+### 客户端写入阻塞
+
+将客户端代码读写段修改如下
+
+~~~~~~~~~~ C++ linenumbers
+char sendbuff[BUFFER_SIZE] = "+";
+int ctr = 0;
+while (true) {
+    ctr++;
+    if(write(client_fd, sendbuff, 1) <= 0){
+        cout << "The Total counter reaches: " << ctr << endl;
+        break;
+    }
+    if(ctr % 100 == 0)
+        cout << "Counter's value have been: " << ctr << endl;
+    // memset(sendbuff, '\0', BUFFER_SIZE);
+}
+~~~~~~~~~~
+
+观察到大约350000左右write阻塞，服务器端缓存已满
+
+![](./pic/6-2.png)
+
+### 服务端读取阻塞
+
+将服务端代码读写段修改如下
+
+~~~~~~~~~~ C++ linenumbers
+char buffer[BUFFER_SIZE] = "+";
+int ctr = 0;
+while(getchar()) {
+    ctr += 100;
+    // memset(buffer, '\0', BUFFER_SIZE);
+    if(read(connect_fd, buffer, 100) == -1)
+        myExit();
+    if(ctr % 100 == 0)
+        cout << "Counter's value have been: " << ctr;
+}
+~~~~~~~~~~
+
+手动键入Enter回车，一次读取100字节的本地缓冲，直到优策客户端write()函数不再阻塞，*由于数据波动较大*，大约20000左右，客户端可以继续向服务端加入待读缓冲数据
+
+还可观察到，当客户端总计写超过400000字节后，再次被阻塞
+
+![](./pic/6-3.png)
+
+### 用netstat -ct 观测
+
+由下图所示，左上图为netstate服务端测试窗口，左下图为netstate客户端测试窗口，右上图为服务端程序运行窗口，右下图为客户端程序运行窗口
+
+将每次回车服务端读取的字节数增大到1000，每次键入回车，观察左上窗口中的Recv-Q减少1000，符合正常判断
+
+当减少到一定程度时，Recv-Q增大，原因是客户端继续写入，使服务端读取字节数增大，Send-Q则保持不定的变化中（只有当write()不阻塞时，才会改变，且迅速改变到定值）
+
+![](./pic/6-4.png)
+
+
+## 服务端写入客户端读取阻塞测试
+
+### 用netstat -ct 观测
+
+几乎程序不变的将服务端，客户端写入读取段代码互换，然后重新测试，这次将服务端写入增加地字节长度改为100字节，客户端读取为每getchar()一次读取1000字节不变
+
+发现这次服务端可写入至待读缓冲地字节数明显增加，约为140万字节
+
+![](./pic/6-5.png)
+
+
+## 通过getsockopt 改变缓冲区大小
+
+### 获取和设置套接口的选项
+
+`getsockopt()` 获取套接口选项
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+#include <sys/socket.h>
+int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen);
+~~~~~~~~~~
+</script>
+
+- sockfd：一个标识套接口的描述字。
+- level：选项定义的层次。例如，支持的层次有SOL_SOCKET、IPPROTO_TCP- 等。
+- optname：需获取的套接口选项。如SO_SNDBUF，SO_RCVBUF分别表示获取发送、接收的缓冲区大小
+- optval：指针，指向存放所获得选项值的缓冲区。
+- optlen：指针，指向optval缓冲区的长度值。
+
+`setsockopt()` 设置套接口选项
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+#include <sys/socket.h>
+int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
+~~~~~~~~~~
+</script>
+
+- sockfd：标识一个套接口的描述字。
+- level：选项定义的层次；支持SOL_SOCKET、IPPROTO_TCP、IPPROTO_IP和IPPROTO_IPV6等。
+- optname：需设置的选项。
+- optval：指针，指向存放选项值的缓冲区。
+- optlen：optval缓冲区长度。
+
+!!! WARNING
+    注意设置缓冲区一定要在 **bind()** 函数之前
+
+### 设置缓冲区大小为32K
+
+服务端设置写入缓冲32K
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+int nRecvBuf = 32 * 1024; //设置为32K -- 32768字节
+if(setsockopt(server_fd, SOL_SOCKET, SO_RCVBUF,(const char*)&nRecvBuf,sizeof(int)) == -1)
+    myExit();
+~~~~~~~~~~
+</script>
+
+客户端设置发送缓冲32K
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+int nSendBuf = 32*1024; //设置为32K
+setsockopt(client_fd,SOL_SOCKET,SO_SNDBUF,(const char*)&nSendBuf,sizeof(int));
+~~~~~~~~~~
+</script>
+
+观察结果，发现缓冲字节数明显减少，但是**并不为32K**
+
+![](./pic/6-6.png)
+
+究其原因................#########################
+
+# Socket读写同步、异步阻塞测试
+
+## 服务与客户端同时顺序读写
+
+将服务端代码段如下
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+char buffer[BUFFER_SIZE] = "+";
+int read_ctr = 0, write_ctr = 0;
+while(true) {
+    read_ctr += read(connect_fd, buffer, readByte);     // 1000
+    // if(read_ctr % 10000 == 0)
+        cout << " Write counter's value have been: " << read_ctr <<endl;
+    // sleep(1);
+    write_ctr += write(connect_fd, buffer, writeByte);   // 500
+    // if(write_ctr % writeByte == 0)
+        cout << " Read counter's value have been: " << write_ctr <<endl;
+    // sleep(1);
+}
+~~~~~~~~~~
+</script>
+
+客户端修改只要将`connect_fd`改为`client_fd`即可
+
+观察结果，发现服务端与客户端都没有输出，即都没有进行读操作与之后的写操作，如果把客户端与服务端同时抽象为一个操作系统，可把此时的状态称为“死锁”。
+
+查看netstat,发现服务端与客户端都没有缓冲
+
+![](./pic/7-1.png)
+
+## 服务与客户端同时顺序写读
+
+服务与客户端代码更改较小，此处不在赘述
+
+### 服务端读写/客户端读写字节分别为1000/1000/1000/1000字节
+
+输出结果如图，
+
+由于读取在写入之后立即(或短时间内)进行且写入的数据量小于最大缓存字节数，所以双方可以流畅无限运行下去
+
+![](./pic/7-2.png)
+
+
+### 服务端读写/客户端读写字节分别为1000/500/500/1000字节
+
+输出结果如图，
+
+由于服务端的写入字节数 = 客户端读取字节数 且 服务端读取字节数 = 客户端写入字节数，所以双方可以流畅无限运行下去
+
+![](./pic/7-3.png)
+
+### 服务端读写/客户端读写字节分别为1000/1000/1/1字节
+
+输出结果如图，
+
+由于服务端的写入字节数 >> 客户端读取字节数 且 服务端读取字节数 >> 客户端写入字节数，所以客户端可以流畅运行，但是的write()服务端会因为待读取缓冲区满而阻塞，而客户端的Recv-Q有数值的原因在于，由于write()阻塞了程序的运行，不能Read而此时客户端一直在写入数据，所以服务端的Recv-Q为客户端write()的数据大小
+
+![](./pic/7-4.png)
+
+
+
+## 服务与客户端分别进行写读、读写
+
+服务与客户端代码更改较小，此处不在赘述
+
+### 服务端读写/客户端读写字节分别为1000/1000/1000/1000字节
+
+输出结果如图，
+
+由于读取在写入之后立即(或短时间内)进行且写入的数据量小于最大缓存字节数，所以双方可以流畅无限运行下去
+
+![](./pic/7-5.png)
+
+
+### 服务端读写/客户端读写字节分别为1000/500/500/1000字节
+
+输出结果如图，
+
+由于服务端的写入字节数 = 客户端读取字节数 且 服务端读取字节数 = 客户端写入字节数，所以双方可以流畅无限运行下去
+
+由于循环次数很大，因此可以忽略开始的服务端、客户端的读写顺序
+
+![](./pic/7-6.png)
+
+### 服务端读写/客户端读写字节分别为1000/1000/1/1字节
+
+输出结果如图，
+
+分析原因类似于上一问题
+
+由于服务端的写入字节数 >> 客户端读取字节数 且 服务端读取字节数 >> 客户端写入字节数，所以客户端可以流畅运行，但是的write()服务端会因为待读取缓冲区满而阻塞，而客户端的Recv-Q有数值的原因在于，由于write()阻塞了程序的运行，不能Read而此时客户端一直在写入数据，所以服务端的Recv-Q为客户端write()的数据大小
+
+还可观察到客户端接收字节数为**等差数列**递增，**公差 = 服务端写入字节数 - 客户端读取字节数**
+
+![](./pic/7-7.png)
+
+## 服务与客户端分别进行读写、写读
+
+经理论分析，本次实验和上一个实验几无差别，经上机实践结果与预测吻合，原因分析如上，故再次不再过多赘述
+
+# 待解决的问题
+
+    df -H
+
+    捕获信号 心跳？
+
+    信号处理函数  准确值 
+
+    加和相等
+
+    extern int 
+
+    SIGPIPE
+
+
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="../lib/markdeep.min.js"></script>
+<script src="../lib/jquery-3.3.1.min.js"></script>
+
+<script type="text/javascript">
+    $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
+</script>
+
+<style>
+    /* .md h2::before{
+        content: counter(h2, lower-alpha)
+    }
+
+    .md h2.notinc::before{
+        counter-increment: none;
+        content: none
+    }
+
+    div.notinc1 h1::before{
+        counter-increment: none;
+        content: "2*"
+    }
+
+    .md h1.notinc::before{
+        counter-increment: none;
+    } */
+
+    .md .image {
+        width: 80%;
+    }
+
+    .md img {
+        border: 1.3px rgb(0, 0, 0) solid;
+    }
+
+    .md div.imagecaption {
+        text-align: center;
+    }
+
+    /* .level2 .tocnumber {
+        display: none
+    } */
+
+    .md code {
+        background-color: rgba(255, 249, 158, 0.788);
+        color: rgb(145, 52, 40);
+    }
+
+    .md pre code {
+        background: none;
+        /* background-color: rgb(250, 238, 224); */
+        /* border: 1.0px rgb(0, 0, 0) solid; */
+    }
+
+    body {
+        font-family: 等线,Palatino,Georgia,"Times New Roman",serif;
+    }
+</style> 

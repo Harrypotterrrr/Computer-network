@@ -17,33 +17,43 @@ using namespace std;
 extern int errno;
 char * error_messg;
 
+
+void myExit(){
+    error_messg = strerror(errno);
+    cerr << error_messg <<endl;
+    exit(EXIT_FAILURE);
+}
+
 int main(int argc,char* argv[])
 {
     ///定义sockfd
     int client_fd;
 
-    if((client_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-        error_messg = strerror(errno);
-        cerr << error_messg <<endl;
-        exit(EXIT_FAILURE);
-    }
-
-    int port = atoi(argv[2]);
+    if((client_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+        myExit();
+    int port_client = atoi(argv[1]);
+    int port_server = atoi(argv[3]);
+    char* ip_server = argv[2];
 
     ///定义sockaddr_in
-    struct sockaddr_in serveAddr;
-    serveAddr.sin_family = AF_INET;
-    //IP地址设置成INADDR_ANY,让系统自动获取本机的IP地址。  
-    serveAddr.sin_port = htons(port);
-    //设置的端口为INADDR_ANY
-    serveAddr.sin_addr.s_addr = inet_addr(argv[1]);
-    // 服务器ip
+    struct sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(port_server);
+    serverAddr.sin_addr.s_addr = inet_addr(ip_server);
 
-    if(connect(client_fd, (struct sockaddr *)&serveAddr, sizeof(serveAddr)) == -1){
-        error_messg = strerror(errno);
-        cerr << error_messg <<endl;
-        exit(EXIT_FAILURE);
-    }
+    struct sockaddr_in clientAddr;
+    clientAddr.sin_port = htons(port_client);
+
+    // use default, not change
+    // clientAddr.sin_family = AF_INET;
+    // clientAddr.sin_addr.s_addr = inet_addr("192.168.60.231");
+
+
+    if(bind(client_fd,(struct sockaddr *)&clientAddr,sizeof(clientAddr)) == -1)
+        myExit();
+
+    if(connect(client_fd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1)
+        myExit();
     else
         cout<<"connection succeed!"<<endl;
 

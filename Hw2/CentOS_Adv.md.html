@@ -230,6 +230,17 @@ mount -t cifs //192.168.80.1/w1651574 /mnt/1651574 -o username=JiaHL,iocharset=c
 
 ![](./pic/2-15.png)
 
+## 在不同虚拟机上远程mount
+~~~~~~~~ bash
+mount -t cifs //192.168.80.230/homework /d1651574 -o username=root,password=haolin_1997
+~~~~~~~~
+!!! WARNING: ATTENTION
+    username 必须包含在在宿主机上设置valid_user中
+
+    Samba用户和Linux用户相同，但是samba有自己独立的密码
+
+    如果不指定username，则默认访问宿主机的root
+
 
 # 在Linux中新增一个网卡
 
