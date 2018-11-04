@@ -72,7 +72,7 @@ int socket(int domain, int type, int protocol);
 
 - type: 套接字通信的类型，常用`SOCKET_STREAM`流式套接字，`SOCK_DGRAM`数据包套接字，前者基于TCP保证数据正确传送到对方，后者基于UDP无保障的面向消息的专门用于局域网，基于广播
 
-- protocol: 常用0
+- protocol: 指定协议。常用的协议有，`IPPROTO_TCP`、`IPPTOTO_UDP`、`IPPROTO_SCTP`、`IPPROTO_TIPC`等，它们分别对应TCP传输协议、UDP传输协议、STCP传输协议、TIPC传输协议。通常情况系设为0，由系统自动设置。注意并不是上面的type和protocol可以随意组合的，如`SOCK_STREAM`不可以跟`IPPROTO_UDP`组合。当protocol为0时，会自动选择type类型对应的默认协议
 
 
 ### bind()函数
