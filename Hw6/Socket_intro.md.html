@@ -532,7 +532,7 @@ while (cin.getline(sendbuff,BUFFER_SIZE)) {
 
 ## 使用recv() 与 send()进行数据传送
 
-recv() 从文件描述符读取到buf中，最大长度为len
+recv() 从文件描述符读取到buf中
 
 返回接收的字节数
 
@@ -544,7 +544,15 @@ recv() 从文件描述符读取到buf中，最大长度为len
 ~~~~~~~~~~
 </script>
 
-send() 从buff向文件描述符写入，最大长度为len
+send() 从buff向文件描述符写入
+
+!!! WARNING: IMPORTANT NOTE
+    send/recv发送长度为buf指针对应的长度，例如 char buf[100]，则会发送100字节，但先会判断这100字节与缓冲长度len大小关系
+    
+    若发送/接收数据长度 > 缓冲长度len 时，会分帧发送/接收
+
+    若发送/接收数据长度 < 缓冲长度len 时，会发送/接收缓冲长度len字节
+
 
 返回发送的字节数
 
@@ -559,6 +567,7 @@ send() 从buff向文件描述符写入，最大长度为len
 !!! WARNING: recv()/send() 与 read()/write()的区别
     区别仅在flags标志位，当flags为0的时候，recv()/send() 与 read()/write()没有区别
 
+
 使用recv()/send()时，可将flag设置为如下选项：
 
 - MSG_DONTWAIT: 启用非阻塞操作，无论操作是否完成都会立刻返回，需要通过其他方式来判断具体操作是否成功
@@ -566,6 +575,42 @@ send() 从buff向文件描述符写入，最大长度为len
 - MSG_WAITALL: 启用阻塞操作，必须要做完IO 操作（包括错误）才会返回
 
 阻塞和非阻塞的区别在于没有数据到达的时候是否立刻返回
+
+- 常用的recv写法
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+#define MAX_READLEN 1000
+char buf[MAX_READLEN];
+int n;
+n=recv (sockfd, buf, sizeof(buf), 0);
+~~~~~~~~~~
+</script>
+!!! WARNING: recv
+    同步：无数据则阻塞，读到任意数据或错误则返回
+
+    异步：无数据立即返回-1（errno置值），读到任意数据或错误则返回
+
+    => 要select返回可读，才能去读(包括错误)
+
+- 常用的send写法
+
+<script type="preformatted">
+~~~~~~~~~~ C++ linenumbers
+#define MAX_WRITELEN 1000
+char buf[MAX_WRITELEN];
+int n;
+//... 给buf赋内容，buflen为实际内容长度
+n=send (sockfd, buf, buflen, 0);
+~~~~~~~~~~
+</script>
+!!! WARNING: send
+    同步：如果数据没写完(未达到参数3指定的值)则阻塞，如出现错误则返回小于指定长度的值
+
+    异步：若缓冲区满则可能返回小于参数3指定的值再次写则立即返回-1（errno置值）
+    
+    => 要select返回可写，才能去写(包括错误)
+
 
 ### 服务端接收与反馈的编写
 
@@ -777,7 +822,7 @@ while(getchar()) {
 ![](./pic/6-5.png)
 
 
-## 通过getsockopt 改变缓冲区大小
+## 通过setsockopt 改变缓冲区大小
 
 ### 获取和设置套接口的选项
 
@@ -816,7 +861,7 @@ int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t
 
 ### 设置缓冲区大小为32K
 
-服务端设置写入缓冲32K
+服务端设置接收缓冲32K
 
 <script type="preformatted">
 ~~~~~~~~~~ C++ linenumbers
