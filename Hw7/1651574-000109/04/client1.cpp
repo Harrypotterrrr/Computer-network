@@ -1,9 +1,5 @@
 #include <iostream>
-#include <sstream>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <stdio.h>
-#include <signal.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -11,10 +7,16 @@
 #include <string.h>
 #include <cstdlib>
 #include <fcntl.h>
+#include <net/if.h>
+#include <netdb.h>
 #include <sys/shm.h>
-#include <arpa/inet.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
 using namespace std;
-#define BUFFER_SIZE (1024)
+#define BUFFER_SIZE (100)
 
 extern int errno;
 char * error_messg;
@@ -38,61 +40,38 @@ void myExit(){
 
 void processData()
 {
-    const int sendLength = 10;
-
-    char sendbuff[sendLength] = "\0";
-    char recvbuff[BUFFER_SIZE] = "\0";
+    const int send_len = 100;
+    const char send_buff[send_len] = "THIS IS A PART OF THE SEND MESSAGE!";
     
-    const char tmp_str[] = "123456789";
-    strcpy(sendbuff, tmp_str);
-
     int ctr_recv_byte = 0, ctr_send_byte = 0;
-
-    bool flag = false;
 
     struct timeval wait_time;
 
     while (true) {
 
-        if(!flag){
-            FD_ZERO(&write_fds);
-            FD_SET(client_fd, &write_fds);
-        }
-        else{
-            FD_ZERO(&read_fds);
-            FD_SET(client_fd, &read_fds);
-        }
-        wait_time.tv_sec = 3; 
-        wait_time.tv_usec = 0;
+        FD_ZERO(&write_fds);
+        FD_SET(client_fd, &write_fds);
+
+        wait_time.tv_sec = 0; 
+        wait_time.tv_usec = 500 * 1000;
+
 
         switch(select(client_fd + 1, &read_fds, &write_fds, NULL, &wait_time)){
             case -1: myExit();
             case 0: 
-                printf("reach time limit\n");
+                // printf("reach time limit\n");
                 break; // go to loop again to wait
             default:
                 if(FD_ISSET(client_fd, &write_fds)){
                     FD_CLR(client_fd, &write_fds);
-                    cout << "send to server: " << sendbuff << endl;
-                    int tmp_rtn = send(client_fd, sendbuff, sendLength, MSG_DONTWAIT);
+                    int tmp_rtn = send(client_fd, send_buff, send_len, MSG_DONTWAIT);
                     if(tmp_rtn == -1)
                         myExit();
-                    ctr_send_byte += tmp_rtn;
-                    cout << "have sent "<<ctr_send_byte << " bytes" << endl;
-                    flag = true;
-                }
-                if(FD_ISSET(client_fd, &read_fds)){
-                    FD_CLR(client_fd, &read_fds);
-                    int tmp_recv = recv(client_fd, recvbuff, sizeof(recvbuff), MSG_DONTWAIT);
-                    if(tmp_recv == -1)
-                        break;
-                    ctr_recv_byte += tmp_recv;
-                    cout << "recieve from server: " << recvbuff << endl;
-                    cout << "have recieved " << ctr_recv_byte << " bytes" << endl;
-                    flag = false;
-                }
-                sleep(1);
 
+                    ctr_send_byte += tmp_rtn;
+                    cout << "send to server: " << send_buff << endl;
+                    cout << "have sent "<<ctr_send_byte << " bytes" << endl;
+                }
         }
     }
 }

@@ -18,7 +18,7 @@
 
 using namespace std;
 #define QUEUE   20
-#define BUFFER_SIZE (1024)
+#define BUFFER_SIZE (100)
 extern int errno;
 char * error_messg;
 
@@ -78,7 +78,7 @@ void processData()
     bool flag = false;
 
     while(true) {
-
+        
         if(flag){
             FD_ZERO(&write_fds);
             FD_SET(connect_fd, &write_fds);
@@ -98,9 +98,11 @@ void processData()
             default:
                 if(FD_ISSET(connect_fd, &read_fds)){
                     FD_CLR(connect_fd, &read_fds);
-                    int tmp_recv = recv(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
-                    if(tmp_recv == -1)
-                        break;
+                    int tmp_recv = recv(connect_fd, buffer, sizeof(buffer), MSG_DONTWAIT);
+                    if(tmp_recv < 1){       // ??
+                        cout <<"the end of conversation" <<endl;
+                        return ;
+                    }
                     ctr_recv_byte += tmp_recv;
                     cout << "recieve from client: " << buffer << endl;
                     cout << "have recieved "<<ctr_recv_byte << " bytes" << endl;

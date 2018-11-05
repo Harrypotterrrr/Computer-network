@@ -18,15 +18,116 @@
 
 using namespace std;
 #define QUEUE   20
-#define BUFFER_SIZE (100)
+#define BUFFER_SIZE (1024)
 extern int errno;
 char * error_messg;
+
+int server_fd, connect_fd;
+struct sockaddr_in server_addr, client_addr;
+fd_set read_fds, write_fds;
+
+
 
 void myExit(){
     error_messg = strerror(errno);
     cerr << error_messg <<endl;
     exit(EXIT_FAILURE);
 }
+
+
+void printServerInfo()
+{
+    cout << "----------------------------------\n";
+    cout << "The socket binds to:"<< endl;
+    cout << "IP: " << inet_ntoa(server_addr.sin_addr) << endl;
+    cout << "port: " << ntohs(server_addr.sin_port) <<endl;
+    cout << "----------------------------------\n";
+}
+
+void printClientInfo()
+{
+    cout<<"client IP: "<<inet_ntoa(client_addr.sin_addr)<<"\tport: "<<ntohs(client_addr.sin_port)<<endl;
+}
+
+void setReusePort()
+{
+    int enable = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
+        myExit();
+}
+
+void setNonBlock(int *fd, int tag)
+{
+    int flag;
+    if((flag = fcntl(*fd, F_GETFL, 0)) == -1)
+        myExit();
+    if(fcntl(*fd, F_SETFL, flag | O_NONBLOCK) == -1)
+        myExit();
+
+    cout << "set " << (tag == 0 ? "server" : "client") << " non-block succeed" << endl;
+}
+
+void processData()
+{
+    const int sendLength = 10;
+
+    char sendbuff[sendLength] = "\0";
+    char recvbuff[BUFFER_SIZE] = "\0";
+    
+    const char tmp_str[] = "123456789";
+    strcpy(sendbuff, tmp_str);
+
+    int ctr_recv_byte = 0, ctr_send_byte = 0;
+
+    bool flag = false;
+
+    struct timeval wait_time;
+
+    while (true) {
+
+        if(!flag){
+            FD_ZERO(&write_fds);
+            FD_SET(connect_fd, &write_fds);
+        }
+        else{
+            FD_ZERO(&read_fds);
+            FD_SET(connect_fd, &read_fds);
+        }
+        wait_time.tv_sec = 3; 
+        wait_time.tv_usec = 0;
+
+        switch(select(connect_fd + 1, &read_fds, &write_fds, NULL, &wait_time)){
+            case -1: printf("-1\n"); myExit();
+            case 0: 
+                printf("reach time limit\n");
+                break; // go to loop again to wait
+            default:
+                if(FD_ISSET(connect_fd, &write_fds)){
+                    FD_CLR(connect_fd, &write_fds);
+                    cout << "send to server: " << sendbuff << endl;
+                    int tmp_rtn = send(connect_fd, sendbuff, sendLength, MSG_DONTWAIT);
+                    if(tmp_rtn < 1)
+                        myExit();
+                    ctr_send_byte += tmp_rtn;
+                    cout << "have sent "<<ctr_send_byte << " bytes" << endl;
+                    flag = true;
+                }
+                if(FD_ISSET(connect_fd, &read_fds)){
+                    FD_CLR(connect_fd, &read_fds);
+                    int tmp_recv = recv(connect_fd, recvbuff, sizeof(recvbuff), MSG_DONTWAIT);
+                    if(tmp_recv == -1)
+                        break;
+                    ctr_recv_byte += tmp_recv;
+                    cout << "recieve from server: " << recvbuff << endl;
+                    cout << "have recieved " << ctr_recv_byte << " bytes" << endl;
+                    flag = false;
+                }
+                sleep(1);
+
+        }
+    }
+}
+
 
 int main(int argc,char* argv[])
 {
@@ -35,126 +136,46 @@ int main(int argc,char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    int server_fd, connect_fd;
 
     if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
         myExit();
 
-    int enable = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
-        myExit();
+    setReusePort();
 
-
-    // set non block
-    int flag;
-    if((flag = fcntl(connect_fd, F_GETFL, 0)) == -1)
-        myExit();
-    if(fcntl(connect_fd, F_SETFL, flag | O_NONBLOCK) == -1)
-        myExit();
-
-    cout<<"set non-block succeed" <<endl;
-
+    setNonBlock(&server_fd, 0);
 
     int port = atoi(argv[1]);
-    // int readByte = atoi(argv[2]);
-    // int writeByte = atoi(argv[3]);
-    // if(readByte > BUFFER_SIZE || writeByte > BUFFER_SIZE){
-    //     cerr << "write or read byte per time is too large!" <<endl;
-    //     exit(EXIT_FAILURE);
-    // }
 
-    struct sockaddr_in serveAddr;
-    serveAddr.sin_family = AF_INET;
-    serveAddr.sin_port = htons(port);
-    serveAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if(bind(server_fd,(struct sockaddr *)&serveAddr,sizeof(serveAddr)) == -1)
+    if(bind(server_fd,(struct sockaddr *)&server_addr,sizeof(server_addr)) == -1)
         myExit();
 
-    cout << "----------------------------------\n";
-    cout << "The socket binds to:"<< endl;
-    cout << "IP: " << inet_ntoa(serveAddr.sin_addr) << endl;
-    cout << "port: " << ntohs(serveAddr.sin_port) <<endl;
-    cout << "----------------------------------\n";
+    printServerInfo();
 
     if(listen(server_fd, QUEUE) == -1)
         myExit();
-
-    struct sockaddr_in client_addr;
-    socklen_t len_client_addr = sizeof(client_addr);
     
+    
+    FD_ZERO(&read_fds);
+    FD_SET(server_fd, &read_fds);
+    if(select(server_fd + 1, &read_fds, NULL, NULL, NULL) == -1)
+        myExit();
+
+
+    socklen_t len_client_addr = sizeof(client_addr);
     if((connect_fd = accept(server_fd, (struct sockaddr*)&client_addr, &len_client_addr)) == -1)
         myExit();
 
     cout<<"connection succeed!"<<endl;
 
-    // if(getpeername(connect_fd, (struct sockaddr*)&client_addr, &len_client_addr) == -1)
-    //     myExit();
-    
-    // cout<<"client IP:"<<inet_ntoa(c.sin_addr)<<"  port:"<<ntohs(c.sin_port)<<endl;
+    printClientInfo();
 
-    cout<<"client IP: "<<inet_ntoa(client_addr.sin_addr)<<"\tport: "<<ntohs(client_addr.sin_port)<<endl;
+    setNonBlock(&connect_fd, 1);
 
-
-
-
-    char sendbuff[BUFFER_SIZE] = "\0";
-    char recvbuff[BUFFER_SIZE] = "\0";
-    
-    const int sendLength = 10;
-    const char tmp_str[] = "*********";
-    strcpy(sendbuff, tmp_str);
-    while (true) {
-	    // if(strcmp(recvbuff,"exit\n")==0)
-        //     break;
-        cout<< sendbuff <<endl;
-        send(client_fd, sendbuff, sendLength, MSG_DONTWAIT); 
-
-        sleep(1);
-
-        if(recv(client_fd, recvbuff, BUFFER_SIZE, MSG_DONTWAIT) == 0){
-            cout<< "receieve NONE!" << endl;
-            break; 
-        } 
-	    cout << "recieve from server: " << recvbuff << endl;
-    }
-
-
-    char buffer[BUFFER_SIZE + 1];
-    struct timeval wait_time;
-    fd_set fds;
-
-    FD_ZERO(&fds);
-    FD_SET(connect_fd, &fds);
-    while(true) {
-
-        // wait_time.tv_sec = 3; 
-        // wait_time.tv_usec = 0;
-
-        memset(buffer, 0, BUFFER_SIZE);
-        int recv_rtn;
-        switch(select(connect_fd+1, &fds, NULL, NULL, NULL)){
-            case -1:
-                myExit();
-            case 0:
-                cout<< "reach time limit" << endl; break;
-            default:
-                recv_rtn = recv(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
-                if(recv_rtn == -1){
-                    cout<< "return is -1, ERROR" << endl;
-                    break; 
-                }
-                else if(recv_rtn == 0){
-                    cout<< "return is 0, recieve NONE" << endl;
-                    break; 
-                }
-                cout << "recieve str: "<< buffer << endl;
-                send(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
-        }
-
-        if(recv_rtn <= 0)
-            break;
-    }
+    processData();
 
     close(connect_fd);
     close(server_fd);

@@ -1,6 +1,4 @@
 #include <iostream>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <stdio.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -9,16 +7,19 @@
 #include <string.h>
 #include <cstdlib>
 #include <fcntl.h>
-#include <sys/shm.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <sys/shm.h>
+#include <sys/time.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 
 
 using namespace std;
 #define QUEUE   20
-#define BUFFER_SIZE (1024)
+#define BUFFER_SIZE (33)
 extern int errno;
 char * error_messg;
 
@@ -69,54 +70,66 @@ void setNonBlock(int *fd, int tag)
 
 void processData()
 {
-    char buffer[BUFFER_SIZE] = "\0";
+    int nRecvBuf = BUFFER_SIZE; // set recieve buffer length : 33 bytes
+    setsockopt(connect_fd, SOL_SOCKET, SO_RCVLOWAT,(const char*)&nRecvBuf,sizeof(int));
 
-    struct timeval wait_time;
+    const char send_len = 10;
+    const char send_buff[send_len] = "123456789";
+    char recv_buff[BUFFER_SIZE] = "\0";
+
+    struct timeval wait_time, start, end;
 
     int ctr_recv_byte = 0, ctr_send_byte = 0;
 
-    bool flag = false;
+    start.tv_sec = 10;
+    end.tv_sec = 0;
 
     while(true) {
-        
-        if(flag){
+        gettimeofday(&end,NULL);
+        if(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0 > 1){
             FD_ZERO(&write_fds);
             FD_SET(connect_fd, &write_fds);
         }
 
         FD_ZERO(&read_fds);
         FD_SET(connect_fd, &read_fds);
-        wait_time.tv_sec = 3; 
-        wait_time.tv_usec = 0;
-
+        wait_time.tv_sec = 0;
+        wait_time.tv_usec = 500 * 1000;
 
         switch(select(connect_fd + 1, &read_fds, &write_fds, NULL, &wait_time)){
             case -1: myExit();
             case 0:
-                printf("reach time limit\n");
+                // printf("reach time limit\n");
                 break; // go to loop again to wait
             default:
-                if(FD_ISSET(connect_fd, &read_fds)){
-                    FD_CLR(connect_fd, &read_fds);
-                    int tmp_recv = recv(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
-                    if(tmp_recv == -1){
-                        cout <<"the end of conversation" <<endl;
-                        return ;
-                    }
-                    ctr_recv_byte += tmp_recv;
-                    cout << "recieve from client: " << buffer << endl;
-                    cout << "have recieved "<<ctr_recv_byte << " bytes" << endl;
-                    flag = true;
 
-                }
-                
                 if(FD_ISSET(connect_fd, &write_fds)){
                     FD_CLR(connect_fd, &write_fds);
-                    ctr_send_byte += send(connect_fd, buffer, strlen(buffer) + 1, MSG_DONTWAIT);
-                    cout << "send to client: " << buffer << endl;
+                    int tmp_rtn = send(connect_fd, send_buff, send_len, MSG_DONTWAIT);
+                    if(tmp_rtn < 1){
+                        cout<<"the end of conversation" <<endl;
+                        return;
+                    }
+
+                    ctr_send_byte += tmp_rtn;
+                    cout << "send to client: " << send_buff << endl;
                     cout << "have sent " << ctr_send_byte << " bytes" << endl;
-                    flag = false;
+                    gettimeofday(&start, NULL);
                 }
+
+                if(FD_ISSET(connect_fd, &read_fds)){
+                    FD_CLR(connect_fd, &read_fds);
+                    int tmp_rtn = recv(connect_fd, recv_buff, sizeof(recv_buff), MSG_DONTWAIT);
+                    if(tmp_rtn < 1){
+                        cout<<"the end of conversation" <<endl;
+                        return;
+                    }
+                    
+                    ctr_recv_byte += tmp_rtn;
+                    cout << "recieve from client: " << recv_buff << endl;
+                    cout << "have recieved "<<ctr_recv_byte << " bytes" << endl;
+                }
+                
         }
     }
 }

@@ -1,0 +1,1117 @@
+<meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
+
+**Socket编程 TCP非阻塞方式**
+    1651574 贾昊霖
+
+# socket的阻塞和非阻塞
+
+## 基本概念
+
+### 阻塞IO
+
+必须要做完IO 操作（包括错误）才会返回
+
+### 非阻塞IO
+
+无论操作是否完成都会立刻返回，需要通过其他方式来判断具体操作是否成功（对于connect，accpet操作，通过select判断，对于recv，recvfrom，send，sendto通过返回值+错误码来判断）
+
+## 阻塞与非阻塞设置
+
+### 非阻塞模式设置
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <unistd.h>
+#include <fcntl.h>
+flags = fcntl(sockfd, F_GETFL, 0); //获取文件的flags值。
+fcntl(sockfd, F_SETFL, flags | O_NONBLOCK); //设置成非阻塞模式；
+
+// 接收发送时
+recv(sockfd, buff, buff_size, MSG_DONTWAIT); // 设置最后一个参数 
+send(scokfd, buff, buff_size, MSG_DONTWAIT); // 设置最后一个参数 
+~~~~~~~~
+</script>
+
+## select()
+
+[学习网站](https://www.cnblogs.com/wenqiang/p/5508541.html)
+
+select函数是一个循环函数，监视多个文件描述符上发生的事件(可读、可写、可读可写、异常)。因此可实现非阻塞编程
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+/* According to POSIX.1-2001, POSIX.1-2008 */
+#include <sys/select.h>
+
+int select(int nfds, fd_set *readfds, fd_set *writefds,
+           fd_set *exceptfds, struct timeval *timeout);
+
+void FD_CLR(int fd, fd_set *set);
+int  FD_ISSET(int fd, fd_set *set);
+void FD_SET(int fd, fd_set *set);
+void FD_ZERO(fd_set *set);
+
+// struct timeval
+struct timeval {
+    time_t         tv_sec;     /* seconds */
+    suseconds_t    tv_usec;    /* microseconds */
+};
+~~~~~~~~
+</script>
+
+- nfds: 一个整数值, 所有文件描述符的最大值加1
+
+- readfds: 用来检查一组可读性的文件描述符，若不检查可用NULL
+
+- writefds: 用来检查一组可写性的文件描述符，若不检查可用NULL
+
+- exceptfds: 用来检查文件文件描述符是否异常，若不检查可用NULL
+
+- timeout: 时间结构体，用来设置超时时间，最多等待时间，对阻塞操作则为NULL
+
+- 返回值：
+    - 负值：select错误
+    - 正值：表示读写文件的数量
+    - 0：等待超过timeout时限，指无任何事件发生时
+
+!!! Warning: Important Notes
+    当有待读数据进入缓冲区，select的可读返回
+
+    只要有socketfd存在，select的可写返回
+
+    任意可读可写事件发生，select立即返回
+
+    因此常设置read_fds监听是否有数据到达，在需要写的时候才设置write_fds监听队列中的文件描述符
+
+
+- FD_ZERO(fd_set *set): 将文件描述符set集合清空
+
+- FD_SET(int fd, fd_set *set): 将fd加入到文件描述符set集合中
+
+- FD_CLR(int fd, fd_set *set): 将fd从文件描述符set集合中清除
+
+- FD_ISSET(int fd, fd_set *set): 测试文件描述符set集合中的fd，即测试fd对应的文件描述符有没有数据可读/可写/异常
+
+
+
+# Socket非阻塞测试
+
+## connect成功后，设置非阻塞，并测试服务端客户端非阻塞recv
+
+服务端以以下方式接收
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+while(true) {
+    memset(buffer, 0, BUFFER_SIZE);
+    int recv_rtn = recv(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
+
+    if(recv_rtn == -1){
+        cout<< "return is -1, ERROR" << endl;
+        break; 
+    }
+    else if(recv_rtn == 0){
+        cout<< "return is 0, recieve NONE" << endl;
+        break; 
+    }
+    cout << buffer << endl;
+    send(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
+}
+~~~~~~~~
+</script>
+
+输出结果如下
+
+![](./pic/1-1.png)
+
+## connect成功后，设置非阻塞，并测试服务端客户端使用select非阻塞编程
+
+将select等待时间设为3s
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+char buffer[BUFFER_SIZE];
+struct timeval wait_time;
+fd_set fds;
+
+while(true) {
+
+    wait_time.tv_sec = 3; 
+    wait_time.tv_usec = 0;
+    FD_ZERO(&fds);
+    FD_SET(connect_fd, &fds);
+    
+    memset(buffer, 0, BUFFER_SIZE);
+    int recv_rtn;
+    switch(select(connect_fd+1, &fds, NULL, NULL, &wait_time)){
+        case -1:
+            myExit();
+        case 0:
+            cout<< "reach time limit" << endl; break;
+        default:
+            recv_rtn = recv(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
+            if(recv_rtn == -1){
+                cout<< "return is -1, ERROR" << endl;
+                break; 
+            }
+            else if(recv_rtn == 0){
+                cout<< "return is 0, recieve NONE" << endl;
+                break; 
+            }
+            cout << "recieve str: "<< buffer << endl;
+            send(connect_fd, buffer, BUFFER_SIZE, MSG_DONTWAIT);
+    }
+
+    if(recv_rtn <= 0)
+        break;
+}
+~~~~~~~~
+</script>
+
+通过select的时间参数设置为NULL，将程序设置为阻塞，因此程序可以按阻塞读取方式收发数据
+
+![](./pic/1-2.png)
+
+!!! Warning
+    注意每次select后wait_time都会减少，所以每次都要重新设置时间
+
+
+## 立即设置非阻塞，之后测试服务端客户端使用select非阻塞编程
+
+对整体程序有较大改动，除了增加非阻塞编程外，添加了函数调用，使程序更加有条理
+
+验证为握手程序
+
+![](./pic/1-3.png)
+
+
+# Socket非阻塞中断测试
+
+本人编写的握手程序对select的理解收获甚大，链接如下
+
+[server.cpp](./1651574-000109/02/server1.cpp)
+
+[client.cpp](./1651574-000109/02/client1.cpp)
+
+## client发数据，server收数据
+
+将客户端数据发送段代码如下:
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+void processData()
+{
+    char buffer[BUFFER_SIZE] = "\0";
+
+    struct timeval wait_time;
+
+    int ctr_recv_byte = 0, ctr_send_byte = 0;
+
+    bool flag = false;
+
+    while(true) {
+        
+        if(flag){
+            FD_ZERO(&write_fds);
+            FD_SET(client_fd, &write_fds);
+        }
+
+        FD_ZERO(&read_fds);
+        FD_SET(client_fd, &read_fds);
+        wait_time.tv_sec = 3; 
+        wait_time.tv_usec = 0;
+
+
+        switch(select(client_fd + 1, &read_fds, &write_fds, NULL, &wait_time)){
+            case -1: myExit();
+            case 0:
+                printf("reach time limit\n");
+                break; // go to loop again to wait
+            default:
+                if(FD_ISSET(client_fd, &read_fds)){
+                    FD_CLR(client_fd, &read_fds);
+                    int tmp_recv = recv(client_fd, buffer, sizeof(buffer), MSG_DONTWAIT);
+                    if(tmp_recv < 1){       // ??
+                        cout <<"the end of conversation" <<endl;
+                        return ;
+                    }
+                    ctr_recv_byte += tmp_recv;
+                    cout << "recieve from client: " << buffer << endl;
+                    cout << "have recieved "<<ctr_recv_byte << " bytes" << endl;
+                    flag = true;
+
+                }
+                
+                if(FD_ISSET(client_fd, &write_fds)){
+                    FD_CLR(client_fd, &write_fds);
+                    ctr_send_byte += send(client_fd, buffer, strlen(buffer) + 1, MSG_DONTWAIT);
+                    cout << "send to client: " << buffer << endl;
+                    cout << "have sent " << ctr_send_byte << " bytes" << endl;
+                    flag = false;
+                }
+        }
+    }
+}
+~~~~~~~~
+</script>
+
+将服务端数据接收段代码如下:
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+void processData()
+{
+    const int sendLength = 10;
+
+    char sendbuff[sendLength] = "\0";
+    char recvbuff[BUFFER_SIZE] = "\0";
+    
+    const char tmp_str[] = "123456789";
+    strcpy(sendbuff, tmp_str);
+
+    int ctr_recv_byte = 0, ctr_send_byte = 0;
+
+    bool flag = false;
+
+    struct timeval wait_time;
+
+    while (true) {
+
+        if(!flag){
+            FD_ZERO(&write_fds);
+            FD_SET(connect_fd, &write_fds);
+        }
+        else{
+            FD_ZERO(&read_fds);
+            FD_SET(connect_fd, &read_fds);
+        }
+        wait_time.tv_sec = 3; 
+        wait_time.tv_usec = 0;
+
+        switch(select(connect_fd + 1, &read_fds, &write_fds, NULL, &wait_time)){
+            case -1: printf("-1\n"); myExit();
+            case 0: 
+                printf("reach time limit\n");
+                break; // go to loop again to wait
+            default:
+                if(FD_ISSET(connect_fd, &write_fds)){
+                    FD_CLR(connect_fd, &write_fds);
+                    cout << "send to server: " << sendbuff << endl;
+                    int tmp_rtn = send(connect_fd, sendbuff, sendLength, MSG_DONTWAIT);
+                    if(tmp_rtn < 1)
+                        myExit();
+                    ctr_send_byte += tmp_rtn;
+                    cout << "have sent "<<ctr_send_byte << " bytes" << endl;
+                    flag = true;
+                }
+                if(FD_ISSET(connect_fd, &read_fds)){
+                    FD_CLR(connect_fd, &read_fds);
+                    int tmp_recv = recv(connect_fd, recvbuff, sizeof(recvbuff), MSG_DONTWAIT);
+                    if(tmp_recv == -1)
+                        break;
+                    ctr_recv_byte += tmp_recv;
+                    cout << "recieve from server: " << recvbuff << endl;
+                    cout << "have recieved " << ctr_recv_byte << " bytes" << endl;
+                    flag = false;
+                }
+                sleep(1);
+
+        }
+    }
+}
+~~~~~~~~
+</script>
+
+### CTRL+C client中断测试
+
+经分析，当使用CTRL+C中断客户端时，select()仍能检测到connect_fd可读，但是recv()会返回-1 或 0
+
+!!! ERROR
+    TODO
+
+![](./pic/2-1.png)
+
+
+### kill client中断测试
+
+使用`&`使客户端运行在后台，然后通过`kill %1` 杀死
+
+结果和用CTRL+C中断相同，客户端会停止
+
+![](./pic/2-2.png)
+
+## server发数据，client收数据
+
+将两dataProcess函数互换即可
+
+### CTRL+C client中断测试
+
+当使用CTRL+C中断客户端时，在服务端select()仍能检测到connect_fd可写，但是由下图红色箭头处send函数进入便异常退出，没有任何返回值
+
+![](./pic/2-3.png)
+
+### kill client中断测试
+
+使用`&`使客户端运行在后台，然后通过`kill %1` 杀死
+
+结果同CTRL+C中断，在send函数处异常退出
+
+![](./pic/2-4.png)
+
+
+# Socket非阻塞伪并行
+
+## server发数据间隔1s，client发数据间隔3s
+
+为实现不产生进程、线程实现非阻塞并行(伪)有两种办法：
+
+1. 使用alert(time)，利用信号捕获时间戳，到时间立即进行写操作
+
+2. 使用gettimeofday()记录时间，放入while(true)循环，并设置select中wait_time为一个较小数(因此为伪并行)
+
+本次使用方法二
+
+server端收发数据代码如下
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+void processData()
+{
+
+    const char send_len = 10;
+    const char send_buff[send_len] = "123456789";
+    char recv_buff[BUFFER_SIZE] = "\0";
+
+    struct timeval wait_time, start, end;
+
+    int ctr_recv_byte = 0, ctr_send_byte = 0;
+
+    start.tv_sec = 10;
+    end.tv_sec = 0;
+
+    while(true) {
+        gettimeofday(&end,NULL);
+        if(end.tv_sec - start.tv_sec + (end.tv_usec - start.tv_usec)/1000000.0 > 1){
+            FD_ZERO(&write_fds);
+            FD_SET(connect_fd, &write_fds);
+        }
+
+        FD_ZERO(&read_fds);
+        FD_SET(connect_fd, &read_fds);
+        wait_time.tv_sec = 0;
+        wait_time.tv_usec = 500 * 1000;
+
+        switch(select(connect_fd + 1, &read_fds, &write_fds, NULL, &wait_time)){
+            case -1: myExit();
+            case 0:
+                // printf("reach time limit\n");
+                break; // go to loop again to wait
+            default:
+
+                if(FD_ISSET(connect_fd, &write_fds)){
+                    FD_CLR(connect_fd, &write_fds);
+                    int tmp_rtn = send(connect_fd, send_buff, send_len, MSG_DONTWAIT);
+                    if(tmp_rtn < 1){
+                        cout<<"the end of conversation" <<endl;
+                        return;
+                    }
+
+                    ctr_send_byte += tmp_rtn;
+                    cout << "send to client: " << send_buff << endl;
+                    cout << "have sent " << ctr_send_byte << " bytes" << endl;
+                    gettimeofday(&start, NULL);
+                    gettimeofday(&end, NULL);
+                }
+
+                if(FD_ISSET(connect_fd, &read_fds)){
+                    FD_CLR(connect_fd, &read_fds);
+                    int tmp_rtn = recv(connect_fd, recv_buff, sizeof(recv_buff), MSG_DONTWAIT);
+                    if(tmp_rtn < 1){
+                        cout<<"the end of conversation" <<endl;
+                        return;
+                    }
+                    
+                    ctr_recv_byte += tmp_rtn;
+                    cout << "recieve from client: " << recv_buff << endl;
+                    cout << "have recieved "<<ctr_recv_byte << " bytes" << endl;
+                }
+                
+        }
+    }
+}
+~~~~~~~~
+</script>
+
+结果如图: 实现了server端发3次收1次，client端发1次收3次
+
+![](./pic/3-1.png)
+
+## 非阻塞情况下设置缓冲区长度
+
+注意到，由于非阻塞条件下会无视MSG_WAITALL参数，因此使用阻塞时有效的代码失败，例如:
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+int nRecvBuf = BUFFER_SIZE; // set recieve buffer length : 100 bytes
+setsockopt(client_fd, SOL_SOCKET, SO_RCVBUF,(const char*)&nRecvBuf,sizeof(int));
+~~~~~~~~
+</script>
+
+当尝试使用设置为接收水线时有效，原因待查 **//TODO**
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+int nRecvBuf = BUFFER_SIZE; // set recieve buffer length : 100 bytes
+setsockopt(client_fd, SOL_SOCKET, SO_RCVLOWAT,(const char*)&nRecvBuf,sizeof(int));
+~~~~~~~~
+</script>
+
+*为了便于截图，将server端缓冲长度设置为33bytes，client端缓冲长度设置为77bytes*
+
+结果如下
+
+![](./pic/3-2.png)
+
+# Socket 非阻塞极限测试
+
+## client写极限测试
+
+代码改动不再叙述
+
+结果如下
+
+![](./pic/4-1.png)
+
+## server端间隔读取
+
+代码改动不再叙述
+
+观察到**server端接收字节数 + server端核心栈接收缓存字节数 + client端核心栈发送缓存字节数 = client端发送字节数**
+
+此等式动态成立，经较长时间，client端
+
+结果如下
+
+![](./pic/4-2.png)
+
+将server端每次读取字节数加大到5000，可以观察到，client段一段时间后重新写入后再次阻塞(由于client端核心栈缓冲区已满)
+
+
+# Socket单进程实现服务端伪并行
+
+## server端连接多client端
+
+### 代码
+
+代码更改较多，完整如下:
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <iostream>
+#include <stdio.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+#include <cstdlib>
+#include <fcntl.h>
+#include <net/if.h>
+#include <signal.h>
+#include <netdb.h>
+#include <sys/shm.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+
+
+using namespace std;
+#define MAX_CLIENT   20
+#define BUFFER_SIZE (100)
+#define WRITE_TIME 1
+#define LEN_SEND 10
+
+
+extern int errno;
+char * error_messg;
+
+int server_fd, connect_fd[MAX_CLIENT];
+struct sockaddr_in server_addr, client_addr;
+fd_set read_fds, write_fds;
+
+int ctr_client = 0;     // the counter of client
+bool flag_client[MAX_CLIENT];   // record the valid of client_fd, whether alive or not
+
+char send_buff[MAX_CLIENT][LEN_SEND];   // the buffer of send
+char recv_buff[MAX_CLIENT][BUFFER_SIZE];    // the buffer of recv
+
+struct timeval wait_time;   // select wait_time
+
+int ctr_recv_byte[MAX_CLIENT], ctr_send_byte[MAX_CLIENT];   // counter of recv/send byte
+
+int max_fd; // record the maximum of fd
+
+
+void myExit(){
+    error_messg = strerror(errno);
+    cerr << error_messg <<endl;
+    exit(EXIT_FAILURE);
+}
+
+void writeWait(int sig)
+{
+    FD_ZERO(&write_fds);
+    for(int i=0 ; i<ctr_client ; i++){
+        if(!flag_client[i])
+            continue;
+        FD_SET(connect_fd[i], &write_fds);
+    }
+    alarm(1);
+}
+
+void init()
+{
+    max_fd = server_fd;
+    for(int i=0 ; i<MAX_CLIENT ; i++){
+        ctr_client = 0;
+        flag_client[i] = false;
+        strcpy(send_buff[i],"123456789");
+        recv_buff[i][0] = '\0';
+        ctr_recv_byte[i] = ctr_send_byte[i] = 0;
+    }
+}
+
+void printServerInfo()
+{
+    cout << "=============================\n";
+    cout << "The socket binds to:"<< endl;
+    cout << "IP: " << inet_ntoa(server_addr.sin_addr) << endl;
+    cout << "port: " << ntohs(server_addr.sin_port) <<endl;
+    cout << "==============================\n";
+}
+
+void printClientInfo(int no)
+{
+    cout << "------------------------------"<<endl;
+    cout << "[#No. " << no <<"]: connection succeed!"<<endl;
+    cout << "[#No. "<< no<<"]: client IP: "<<inet_ntoa(client_addr.sin_addr)<<"\tport: "<<ntohs(client_addr.sin_port)<<endl;
+    cout << "------------------------------"<<endl;
+}
+
+void setReusePort()
+{
+    int enable = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
+        myExit();
+}
+
+void setNonBlock(int *fd, int tag)
+{
+    int flag;
+    if((flag = fcntl(*fd, F_GETFL, 0)) == -1)
+        myExit();
+    if(fcntl(*fd, F_SETFL, flag | O_NONBLOCK) == -1)
+        myExit();
+
+    cout << "set " << (tag == 0 ? "server" : "client") << " non-block succeed" << endl;
+}
+
+
+void sendMsg()
+{
+    for(int i=0 ; i < ctr_client ; i++){
+        if(!flag_client[i])
+            continue;
+        if(FD_ISSET(connect_fd[i], &write_fds)){
+            FD_CLR(connect_fd[i], &write_fds);
+            int tmp_rtn = send(connect_fd[i], send_buff[i], LEN_SEND, MSG_DONTWAIT);
+            if(tmp_rtn < 1){
+                cout<<"[No. " << i <<"]: the end of conversation" <<endl;
+                flag_client[i] = false;
+                close(connect_fd[i]);
+            }
+
+            ctr_send_byte[i] += tmp_rtn;
+            cout<<"[No. " << i <<"]: send to client: " << send_buff[i] << endl;
+            cout<<"[No. " << i <<"]: "<< ctr_send_byte[i] << " bytes have sent " << endl;
+        }
+    }
+}
+
+void recvMsg()
+{
+    for(int i=0 ; i < ctr_client ; i++){
+        if(!flag_client[i])
+            continue;
+        if(FD_ISSET(connect_fd[i], &read_fds)){
+            FD_CLR(connect_fd[i], &read_fds);
+            int tmp_rtn = recv(connect_fd[i], recv_buff[i], sizeof(recv_buff[i]), MSG_DONTWAIT);
+            if(tmp_rtn < 1){
+                cout << "------------------------------"<<endl;
+                cout<<"[No. " << i <<"]: the end of conversation" <<endl;
+                cout << "------------------------------"<<endl;
+                flag_client[i] = false;
+                close(connect_fd[i]);
+            }
+            
+            ctr_recv_byte[i] += tmp_rtn;
+            cout<<"[No. " << i <<"]: recieve from client: " << recv_buff[i] << endl;
+            cout<<"[No. " << i <<"]: "<< ctr_recv_byte[i] << " bytes have recieved " << endl;
+        }
+    }
+}
+
+void createNewConnect()
+{
+    socklen_t len_client_addr = sizeof(client_addr);
+    int i = ctr_client++;
+    if((connect_fd[i] = accept(server_fd, (struct sockaddr*)&client_addr, &len_client_addr)) == -1)
+        myExit();
+    
+    max_fd = max_fd > connect_fd[i] ? max_fd : connect_fd[i];
+
+    printClientInfo(i);
+
+    setNonBlock(&connect_fd[i], 1);
+
+    flag_client[i] = true;
+}
+
+int main(int argc,char* argv[])
+{
+     if(argc != 2){
+        cerr << "Not match parameters!" <<endl;
+        exit(EXIT_FAILURE);
+    }
+
+
+    if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+        myExit();
+
+    setReusePort();
+
+    setNonBlock(&server_fd, 0);
+
+    int port = atoi(argv[1]);
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if(bind(server_fd,(struct sockaddr *)&server_addr,sizeof(server_addr)) == -1)
+        myExit();
+
+    printServerInfo();
+
+    if(listen(server_fd, MAX_CLIENT) == -1)
+        myExit();
+    
+    cout << "server is listening" <<endl;
+    
+
+    init();
+
+    signal(SIGALRM, writeWait);
+    alarm(WRITE_TIME);
+    while(true){
+        FD_ZERO(&read_fds);
+        FD_SET(server_fd, &read_fds);
+        for(int i=0 ; i<ctr_client ; i++){
+            if(!flag_client[i])
+                continue;
+            FD_SET(connect_fd[i], &read_fds);
+        }
+
+        // wait_time.sec = 3;
+        // wait_time.usec = 0;
+
+        switch(select(max_fd + 1, &read_fds, &write_fds, NULL, NULL)){
+            case -1:    // alarm ring to arouse the -1 return of select function
+                if(errno != EINTR)
+                    myExit();
+                sendMsg();
+            case 0: break;
+            default:
+                if(FD_ISSET(server_fd, &read_fds))
+                    createNewConnect();
+                recvMsg();
+        }
+    }
+
+    close(server_fd);
+    return 0;
+}
+~~~~~~~~
+</script>
+
+### 代码说明
+
+1. 更换监听并行方法，由此前通过`gettimeofday`至方法1,使用`alarm`信号处理，每隔1s系统检测`alarm`信号，并将`write_fd`数组重置，使其可被检测
+
+2. 将此前`accept`函数前的`select`与数据收发的select合并，将`server_fd`放入`read_fds`集合，由`select`监听，一旦有数据传入，`select`监听返回，用`FD_ISSET`判断其可读状态，若可读，说明有新的连接尝试接入，此时`accept`新建立连接
+
+3. `select`返回值:
+
+    - > 0 : 先检测server_fd是否更改，如果有接收连接。无论是否有clinet端尝试连接，都对数据进行`recieve`
+
+    - ==0 : 本例不存在该情况，因为设置了`wait_time` = 3, 当`wait_time` < 1时，会进入该分支
+
+    - < 0 : 这是由于`alarm()`使`errno`置`EINTR`，因此此时判断各`connect_fd`是否可写，然后进行`send`操作，否则如果`errno`不为`EINTR`，说明`select`错误，程序`exit`
+
+4. 该方法仅限从起始到结束最多上限伪20个客户端接入，可用优先队列最小堆获取最小序号进行优化
+
+### 运行结果
+
+由图所示，当一个client端连接时，server端每隔1s发送，每隔3s接收，client端每隔1s接收，每隔3s发送
+
+![](./pic/5-1.png)
+
+增加一个client端，server端可以实现伪并行，即client端发送任务统一处理，接收任务由select监听后立即处理
+
+![](./pic/5-2.png)
+
+结束一个client端，再重新增加一个，新clinet序号为2，同样可以实现伪并行运行
+
+![](./pic/5-3.png)
+
+
+## client端连接多server端
+
+### 代码
+
+代码更改思路与server端不同，更改如下
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <iostream>
+#include <stdio.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+#include <cstdlib>
+#include <fcntl.h>
+#include <net/if.h>
+#include <signal.h>
+#include <netdb.h>
+#include <sys/shm.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+
+
+using namespace std;
+#define MAX_CLIENT   20
+#define BUFFER_SIZE (100)
+#define WRITE_TIME 1
+#define LEN_SEND 10
+
+
+extern int errno;
+char * error_messg;
+
+int server_fd, connect_fd[MAX_CLIENT];
+struct sockaddr_in server_addr, client_addr;
+fd_set read_fds, write_fds;
+
+int ctr_client = 0;     // the counter of client
+bool flag_client[MAX_CLIENT];   // record the valid of client_fd, whether alive or not
+
+char send_buff[MAX_CLIENT][LEN_SEND];   // the buffer of send
+char recv_buff[MAX_CLIENT][BUFFER_SIZE];    // the buffer of recv
+
+struct timeval wait_time;   // select wait_time
+
+int ctr_recv_byte[MAX_CLIENT], ctr_send_byte[MAX_CLIENT];   // counter of recv/send byte
+
+int max_fd; // record the maximum of fd
+
+
+void myExit(){
+    error_messg = strerror(errno);
+    cerr << error_messg <<endl;
+    exit(EXIT_FAILURE);
+}
+
+void writeWait(int sig)
+{
+    FD_ZERO(&write_fds);
+    for(int i=0 ; i<ctr_client ; i++){
+        if(!flag_client[i])
+            continue;
+        FD_SET(connect_fd[i], &write_fds);
+    }
+    alarm(1);
+}
+
+void init()
+{
+    max_fd = server_fd;
+    for(int i=0 ; i<MAX_CLIENT ; i++){
+        ctr_client = 0;
+        flag_client[i] = false;
+        strcpy(send_buff[i],"123456789");
+        recv_buff[i][0] = '\0';
+        ctr_recv_byte[i] = ctr_send_byte[i] = 0;
+    }
+}
+
+void printServerInfo()
+{
+    cout << "=============================\n";
+    cout << "The socket binds to:"<< endl;
+    cout << "IP: " << inet_ntoa(server_addr.sin_addr) << endl;
+    cout << "port: " << ntohs(server_addr.sin_port) <<endl;
+    cout << "==============================\n";
+}
+
+void printClientInfo(int no)
+{
+    cout << "------------------------------"<<endl;
+    cout << "[#No. " << no <<"]: connection succeed!"<<endl;
+    cout << "[#No. "<< no<<"]: client IP: "<<inet_ntoa(client_addr.sin_addr)<<"\tport: "<<ntohs(client_addr.sin_port)<<endl;
+    cout << "------------------------------"<<endl;
+}
+
+void setReusePort()
+{
+    int enable = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
+        myExit();
+}
+
+void setNonBlock(int *fd, int tag)
+{
+    int flag;
+    if((flag = fcntl(*fd, F_GETFL, 0)) == -1)
+        myExit();
+    if(fcntl(*fd, F_SETFL, flag | O_NONBLOCK) == -1)
+        myExit();
+
+    cout << "set " << (tag == 0 ? "server" : "client") << " non-block succeed" << endl;
+}
+
+
+void sendMsg()
+{
+    for(int i=0 ; i < ctr_client ; i++){
+        if(!flag_client[i])
+            continue;
+        if(FD_ISSET(connect_fd[i], &write_fds)){
+            FD_CLR(connect_fd[i], &write_fds);
+            int tmp_rtn = send(connect_fd[i], send_buff[i], LEN_SEND, MSG_DONTWAIT);
+            if(tmp_rtn < 1){
+                cout<<"[No. " << i <<"]: the end of conversation" <<endl;
+                flag_client[i] = false;
+                close(connect_fd[i]);
+            }
+
+            ctr_send_byte[i] += tmp_rtn;
+            cout<<"[No. " << i <<"]: send to client: " << send_buff[i] << endl;
+            cout<<"[No. " << i <<"]: "<< ctr_send_byte[i] << " bytes have sent " << endl;
+        }
+    }
+}
+
+void recvMsg()
+{
+    for(int i=0 ; i < ctr_client ; i++){
+        if(!flag_client[i])
+            continue;
+        if(FD_ISSET(connect_fd[i], &read_fds)){
+            FD_CLR(connect_fd[i], &read_fds);
+            int tmp_rtn = recv(connect_fd[i], recv_buff[i], sizeof(recv_buff[i]), MSG_DONTWAIT);
+            if(tmp_rtn < 1){
+                cout << "------------------------------"<<endl;
+                cout<<"[No. " << i <<"]: the end of conversation" <<endl;
+                cout << "------------------------------"<<endl;
+                flag_client[i] = false;
+                close(connect_fd[i]);
+            }
+            
+            ctr_recv_byte[i] += tmp_rtn;
+            cout<<"[No. " << i <<"]: recieve from client: " << recv_buff[i] << endl;
+            cout<<"[No. " << i <<"]: "<< ctr_recv_byte[i] << " bytes have recieved " << endl;
+        }
+    }
+}
+
+void createNewConnect()
+{
+    socklen_t len_client_addr = sizeof(client_addr);
+    int i = ctr_client++;
+    if((connect_fd[i] = accept(server_fd, (struct sockaddr*)&client_addr, &len_client_addr)) == -1)
+        myExit();
+    
+    max_fd = max_fd > connect_fd[i] ? max_fd : connect_fd[i];
+
+    printClientInfo(i);
+
+    setNonBlock(&connect_fd[i], 1);
+
+    flag_client[i] = true;
+}
+
+int main(int argc,char* argv[])
+{
+     if(argc != 2){
+        cerr << "Not match parameters!" <<endl;
+        exit(EXIT_FAILURE);
+    }
+
+
+    if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+        myExit();
+
+    setReusePort();
+
+    setNonBlock(&server_fd, 0);
+
+    int port = atoi(argv[1]);
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if(bind(server_fd,(struct sockaddr *)&server_addr,sizeof(server_addr)) == -1)
+        myExit();
+
+    printServerInfo();
+
+    if(listen(server_fd, MAX_CLIENT) == -1)
+        myExit();
+    
+    cout << "server is listening" <<endl;
+    
+
+    init();
+
+    signal(SIGALRM, writeWait);
+    alarm(WRITE_TIME);
+    while(true){
+        FD_ZERO(&read_fds);
+        FD_SET(server_fd, &read_fds);
+        for(int i=0 ; i<ctr_client ; i++){
+            if(!flag_client[i])
+                continue;
+            FD_SET(connect_fd[i], &read_fds);
+        }
+
+        // wait_time.sec = 3;
+        // wait_time.usec = 0;
+
+        switch(select(max_fd + 1, &read_fds, &write_fds, NULL, NULL)){
+            case -1:    // alarm ring to arouse the -1 return of select function
+                if(errno != EINTR)
+                    myExit();
+                sendMsg();
+            case 0: break;
+            default:
+                if(FD_ISSET(server_fd, &read_fds))
+                    createNewConnect();
+                recvMsg();
+        }
+    }
+
+    close(server_fd);
+    return 0;
+}
+~~~~~~~~
+</script>
+
+### 代码说明
+
+1. 相比较server端，通过设置`server_fd`的监听`read_fds`，从而达到连接多个客户端，client端连接多server端的思路是：建立多个`client_fd`描述符(句柄)，设置不同的serverAddr，先后进行连接请求，而实现的
+
+2. 整体代码修改难度远远小于server端，本代码取消了client端对自己的`bind`绑定(由于会出现端口重用的问题)，当然也可以进行`bind`绑定，只要对新建立的不同的`socket_fd`描述自分别设置不同的端口号再进行绑定就可以了
+
+### 运行结果
+
+由图所示，当一个client端同时连接两个server端时，每个server端成功检测到client端的请求
+
+![](./pic/5-4.png)
+
+对于每个server端：每隔1s发送，每隔3s接收，client端每隔1s接收两个server端发来的数据，每隔3s向两个server端发送数据
+
+当client端主动结束连接时，每个client端正常检测
+
+![](./pic/5-5.png)
+
+如图所示，同时打开两个server端，两个client端后，每个server端正常连接。
+
+由于屏幕大小有限，可以验证：每个client端向每个server端每隔3s发送数据，每隔1s从server端接收数据；每个server端向每个client端每隔1s发送数据，每隔3s从client端接收数据
+
+![](./pic/5-6.png)
+
+# 尚未解决的问题
+
+listen后 select , server_fd->read_fds
+
+alarm()使errno置EINTR ->select
+
+send recv 返回 -1 0
+
+
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="../lib/markdeep.min.js"></script>
+<script src="../lib/jquery-3.3.1.min.js"></script>
+
+<script type="text/javascript">
+    $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
+</script>
+
+<style>
+    /* .md h2::before{
+        content: counter(h2, lower-alpha)
+    }
+
+    .md h2.notinc::before{
+        counter-increment: none;
+        content: none
+    }
+
+    div.notinc1 h1::before{
+        counter-increment: none;
+        content: "2*"
+    }
+
+    .md h1.notinc::before{
+        counter-increment: none;
+    } */
+
+    .md .image {
+        width: 80%;
+    }
+
+    .md img {
+        border: 1.3px rgb(0, 0, 0) solid;
+    }
+
+    .md div.imagecaption {
+        text-align: center;
+    }
+
+    /* .level2 .tocnumber {
+        display: none
+    } */
+
+    .md code {
+        background-color: rgba(255, 249, 158, 0.788);
+        color: rgb(145, 52, 40);
+    }
+
+    .md pre code {
+        background: none;
+        /* background-color: rgb(250, 238, 224); */
+        /* border: 1.0px rgb(0, 0, 0) solid; */
+    }
+
+    body {
+        font-family: 等线,Palatino,Georgia,"Times New Roman",serif;
+    }
+</style> 
