@@ -294,6 +294,8 @@ clean:
 注意这里多加了一个伪目标 便于生成动态与静态可执行文件，运行完全正确！  
 ![](./pic/dy_st_init-2-17.png)
 
+!!! WARNING
+    如果提示 mysql_real_connect failed(Can't connect to local MySQL server through socket '/tmp/mysql.sock' (2)) 问题，可以尝试使用软连接，将原目录下socket，映射链接到报错目录: `ln -s /var/lib/mysql/mysql.sock /tmp/mysql.sock`
 
 
 # Linux下的动态链接库的编译与使用
