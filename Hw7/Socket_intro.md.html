@@ -758,7 +758,7 @@ int main(int argc,char* argv[])
 
     - ==0 : 本例不存在该情况，因为设置了`wait_time` = 3, 当`wait_time` < 1时，会进入该分支
 
-    - < 0 : 这是由于`alarm()`使`errno`置`EINTR`，因此此时判断各`connect_fd`是否可写，然后进行`send`操作，否则如果`errno`不为`EINTR`，说明`select`错误，程序`exit`
+    - < 0 : 这是由于`alarm()`使`errno`置`EINTR`，因此此时判断各`connect_fd`是否可写，然后进行`send`操作，否则如果`errno`不为`EINTR`，说明`select`错误，程序`exit`, 此处的`EINTR`的意思为中断错误(即本例为`alarm`信号中断)，此时可以继续select
 
 4. 该方法仅限从起始到结束最多上限伪20个客户端接入，可用优先队列最小堆获取最小序号进行优化
 
@@ -1051,8 +1051,6 @@ int main(int argc,char* argv[])
 # 尚未解决的问题
 
 listen后 select , server_fd->read_fds
-
-alarm()使errno置EINTR ->select
 
 send recv 返回 -1 0
 
