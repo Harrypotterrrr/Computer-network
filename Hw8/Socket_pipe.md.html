@@ -1,0 +1,802 @@
+<meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
+
+**进程通讯方式**
+    1651574 贾昊霖
+
+# 无名管道方式
+
+## 补充
+
+[学习网站1](https://blog.csdn.net/farsight2009/article/details/53887084)
+
+管道实际上就是个只存在于内存中的文件，对这个文件的操作要通过两个已经打开文件进行，它们分别代表管道的两端。
+
+管道是一种特殊的文件，它不属于某一种文件系统，而是一种独立的文件系统，有其自己的数据结构。
+
+一个进程向管道中写的内容被管道另一端的进程读出。写入的内容每次都添加在管道缓冲区的末尾，并且每次都是从缓冲区的头部读出数据。
+
+![](./pic/0-1.png) ![](./pic/0-2.png) ![](./pic/0-3.png)
+
+### 无名管道
+
+### 特性
+
+- 只能在相关的，有共同祖先的进程间使用（即一般用户父子进程）因此通常一个管道由一个进程创建，然后该进程调用fork，此后父子进程之间就可以通过管道通信
+
+- **半双工的通信模式**，具有固定的读端和写端：传输方向同时只能是一个方向
+
+### 注意事项
+
+- 当读一个写端已被关闭的管道时，在所有数据都被读取后， `read`返回0，以指示达到了文件结束处
+
+- 当写一个读端已被关闭的管道，则产生信号`SIGPIPE`。如果忽略该信号或者捕捉该信号并从其处理程序返回，则`write`出错返回，`erron`设置为`EPIPE`
+
+- 关闭一个管道的所有文件描述符等于关闭这个管道（不能读不能写）
+
+- 几乎不会在一个进程中打开一个管道仅供进程自己使用，因为管道是用来交换数据的，一个进程已经能够访问它要通过管道共享的数据，和自己共享数据是没有意义的。
+
+- **试图对一个管道的某一端同时进行读写操作是一个严重的错误。**
+
+## 父进程向子进程发送数据
+
+由于读一端的数据在管道数据缓冲区空时是阻塞的，因此不必担心读取时间点带来的读取失败问题
+
+管道是单向的，在管道中，第一个文件描述符只读,第二个文件描述符只写
+
+详细注释见代码
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <iostream>
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#define MAX_BUF 100
+
+extern int errno;
+char *error_messg;
+
+void myExit(){
+    error_messg = strerror(errno);
+    std::cerr << error_messg << std::endl;
+    exit(EXIT_FAILURE);
+}
+
+int main(){
+
+    signal(SIGCHLD, SIG_IGN);   // recycle the child process
+
+    char buffer[MAX_BUF];
+    int data_len;
+    int pipe_fd[2];
+    if(pipe(pipe_fd) == -1)
+        myExit();
+
+    pid_t pid = fork();
+    if(pid == -1)
+        myExit();
+    if(pid == 0){
+        close(pipe_fd[1]); // close the write end
+
+        data_len = read(pipe_fd[0], buffer, MAX_BUF);
+
+        std::cout << data_len << " bytes, child process have recieved" << std::endl;
+        exit(EXIT_SUCCESS);
+    }
+
+    strcpy(buffer, "0123456789");
+    close(pipe_fd[0]); // close the read end
+    write(pipe_fd[1], buffer, strlen(buffer) + 1);
+    std::cout << strlen(buffer) + 1 << " bytes, parent process have sent" << std::endl;
+
+    return 0;
+}
+~~~~~~~~
+</script>
+
+
+## 子进程向父进程发送数据
+
+程序类似
+
+## 父子进程双向通讯
+
+由于管道是双向的，且目前没有查询到可以打开管道一段的方式，因此只能创建两个管道进行双向数据传送
+
+运行结果:
+
+![](./pic/1-1.png)
+
+由于无名管道通过字节流传接数据，因此与数据类型无关，最大长度根据操作系统不同而有所变化，CentOS的最大长度一般为64K
+
+# 有名管道方式
+
+## 补充
+
+### 有名管道
+
+### 特性
+
+- 不仅限于亲子进程之间，可以使互不相关的两个进程互相通信。有名管道可以通过路径名来指出，并且在文件系统中可见：Linux中专门设立了一个专门的特殊文件系统--管道文件，以FIFO的文件形式存在于文件系统中，这样，即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径，就能够彼此通过FIFO相互通信，因此，通过FIFO不相关的进程也能交换数据
+
+- **半双工的通信模式**，具有固定的读端和写端：传输方向同时只能是一个方向
+
+### 有名管道的创建
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/types.h>
+#include <sys/stat.h>
+int mkfifo(const char *pathname, mode_t mode);
+~~~~~~~~
+</script>
+
+- pathname: **管道路径名(包含管道名，eg:"/tmp/pipe_test")**，指FIFO在文件系统中的名字
+
+- mode: 文件的读写权限，类似于chmod
+
+### 打开有名管道
+<script type="preformatted">
+~~~~~~~~ C++ 
+open(const char *path, int flags);
+~~~~~~~~
+</script>
+
+- path: **路径名**
+
+- flags: 
+
+    - O_RDONLY：open将会调用阻塞，除非有另外一个进程以写的方式打开同一个FIFO，否则一直等待
+
+    - O_WRONLY：open将会调用阻塞，除非有另外一个进程以读的方式打开同一个FIFO，否则一直等待
+
+    - O_RDONLY|O_NONBLOCK：如果此时没有其他进程以写的方式打开FIFO，此时open也会成功返回，此时FIFO被读打开，而不会返回错误
+
+    - O_WRONLY|O_NONBLOCK：立即返回，如果此时没有其他进程以读的方式打开，open会失败打开，此时FIFO没有被打开，返回-1
+
+
+## 父进程向子进程发送数据
+
+与无名管道类似，通过文件描述符标识管道
+
+不同的是，无名管道`pipe()`直接得到管道标识符，而有名管道通过`mkfifo`创建管道博爱存在文件系统中，再通过`open()`打开，用类似于文件读/写的方式控制管道的读写操作，而非无名管道通过0/1接口选择读/写
+
+使用阻塞方式读写
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <iostream>
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <fcntl.h>  
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+
+#define MAX_BUF 100
+#define FIFO_NAME "/tmp/pipe_test"
+
+extern int errno;
+char *error_messg;
+
+void myExit(){
+    error_messg = strerror(errno);
+    std::cerr << error_messg << std::endl;
+    exit(EXIT_FAILURE);
+}
+
+int main(){
+
+    signal(SIGCHLD, SIG_IGN);   // recycle the child process
+
+    char buffer[MAX_BUF];
+    int data_len;
+    int pipe_fd;
+    
+    if(access(FIFO_NAME, F_OK) == -1 && mkfifo(FIFO_NAME, 0777))  // if the pipe doesn't exist
+        myExit();
+
+    pid_t pid = fork();
+    if(pid == -1)
+        myExit();
+    if(pid == 0){
+
+        if((pipe_fd = open(FIFO_NAME, O_RDONLY)) == -1)
+            myExit();
+        data_len = read(pipe_fd, buffer, sizeof(buffer));
+        std::cout << strlen(buffer) + 1 << " bytes, child process have sent" << std::endl;
+        std::cout << buffer << "#, is child process sent" <<std::endl;
+        close(pipe_fd);
+        exit(EXIT_SUCCESS);
+    }
+
+    
+    if((pipe_fd = open(FIFO_NAME, O_WRONLY)) == -1)
+        myExit();
+
+    strcpy(buffer, "9876543210");
+    write(pipe_fd, buffer, strlen(buffer) + 1);
+    std::cout << strlen(buffer) + 1 << " bytes, parent process have sent" << std::endl;
+    std::cout << buffer << "#, is parent process sent" <<std::endl;
+    
+    
+    close(pipe_fd);
+    return 0;
+}
+~~~~~~~~
+</script>
+
+
+## 子进程向父进程发送数据
+
+程序类似
+
+## 父子进程双向通讯
+
+读取/写入完毕，`close()`关闭文件后，再次用写入/读取的方式`open()`打开
+
+运行结果
+![](./pic/2-1.png)
+
+## 两个进程间的单向数据通讯
+
+程序类似
+
+先启动test4-2-2，程序阻塞等待，再启动test4-2-1，收发正常
+
+先启动test4-2-1，程序阻塞等待，再启动test4-2-2，收发正常
+
+运行结果
+![](./pic/2-2.png)
+
+## 两个进程间的双向数据通讯
+
+程序修改类似
+
+运行结果
+
+![](./pic/2-3.png)
+
+传输限制于无名管道相似 
+
+!!! Warning
+    TODO
+
+# 信号方式
+
+## kill()函数
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/types.h>
+#include <signal.h>
+int kill(pid_t pid, int sig);
+~~~~~~~~
+</script>
+
+- pid: 欲送往进程的pid号
+
+- sig: 信号
+
+## 信号编号
+
+编号为1 ~ 31的信号为传统UNIX支持的信号，是不可靠信号(非实时的)，编号为32 ~ 63的信号是后来扩充的，称做可靠信号(实时信号)。不可靠信号和可靠信号的区别在于前者不支持排队，可能会造成信号丢失，而后者不会
+
+## 不同进程的信号发送与接收
+
+
+# 信号量方式
+
+## 补充
+
+### 信号量
+
+信号量通过生成并使用令牌来授权，在任一时刻只能有一个执行线程访问代码的临界区域
+
+!!! Warning
+    信号与信号量是不同的两种事物
+
+信号量就可以提供这样的一种访问机制，让一个临界区同一时间只有一个线程在访问它，也就是说信号量调协进程对共享资源的访问的
+
+!!! Note
+    临界区域泛指共享资源。
+
+### 信号量的创建
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/sem.h>
+int semget (key_t key, int nsem, int oflag) ;
+~~~~~~~~
+</script>
+
+- key: 新建常用`IPC_PRIVATE` 或者利用`ftok()`函数获得
+
+- nsem: 信号量的个数，常为 1
+
+- oflag: 常为`IPC_CREAT`或`IPC_EXCL`
+
+- 返回信号量标识符ID，或错误-1
+
+
+!!! Tip: 两个常用flag常数
+    IPC_CREATE表示若信号量已存在，返回该信号量标识符ID
+
+    IPC_EXCL表示若信号量已存在，返回错误
+
+信号量结构体定义如下:
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+struct semid_ds {
+    struct ipc_permsem_perm ;
+    structsem* sem_base ;   // 信号数组指针
+    ushort sem_nsem ;       // 此集中信号个数
+    time_t sem_otime ;      // 最后一次semop时间
+    time_t sem_ctime ;      // 最后一次创建时间
+};
+~~~~~~~~
+</script>
+
+### 信号量的修改
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+int semop(int sem_id,struct sembuf *sem_opa,size_t num_sem_ops);
+~~~~~~~~
+</script>
+
+- sem_opa: 信号量结构体，结构如下
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+struct sembuf{  
+    short sem_num;  // 除非使用一组信号量，否则它为0  
+    short sem_op;   // 信号量在一次操作中需要改变的数据，通常是两个数
+                    // 一个是-1，即P（上锁）操作，  
+                    // 一个是+1，即V（开锁）操作。  
+    short sem_flg;  // 通常为SEM_UNDO,使操作系统跟踪信号，  
+                    // 并在进程没有释放该信号量而终止时，操作系统释放信号量  
+};
+~~~~~~~~
+</script>
+
+### 信号量的的控制
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+int semctl(int sem_id, int sem_num, int command, [union semun sem_union]);
+~~~~~~~~
+</script>
+
+- command: 有两个值`SETVAL`,`IPC_RMID`，分别表示初始化和删除信号量
+
+- sem_union: 结构如下，一般用到的是`val`,表示要传给信号量的初始值。
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+union semun{  
+    int val; 
+    struct semid_ds *buf;  
+    unsigned short *arry;  
+}; 
+~~~~~~~~
+</script>
+
+## 消息队列的单向传输
+
+运行结果如图
+
+![](./pic/4-1.png)
+
+发现如果有之前残留的数据信息再消息队列中，下一次仍然会先读取出来
+
+## 消息队列的双向传输
+
+程序类似
+
+程序思路如下:
+
+- 利用有名通道将test3-1-2的pid发送给test3-1-1
+
+- 两程序均使用阻塞方式`open()`打开，因此可以无关先后地等待对方写入/读取成功
+
+- 
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <sys/types.h>
+#include <signal.h>
+int kill(pid_t pid, int sig);
+~~~~~~~~
+</script>
+
+
+
+
+
+
+
+运行结果如图
+
+![](./pic/4-2.png)
+
+
+
+# 消息队列方式
+
+## 补充
+
+### 消息队列
+
+Linux中的消息队列是进程间通信的一种方式，通过创建一个消息队列可以完成一个或者多个进程的信息交汇
+
+消息队列的本质其实是一个内核提供的链表，内核基于这个链表，实现了一个数据结构，并且通过维护这个数据结构来维护这个消息队列
+
+向消息队列中**写数据**，实际上是向这个数据结构中**插入一个新结点**；从消息队列汇总**读数据**，实际上是从这个数据结构中**删除一个结点**
+
+!!! Warning
+    不管是接受消息队列还是在发送消息队列时，都需要用户自己定义一个结构体。因为消息队列是面向数据块的，读取数据和发送数据都是以结构体的形式进行传递，因此需要我们自己定义数据结构，面向数据块也是消息队列的一个重要特性
+
+一般结构体定义如下:
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+struct msgBuf{
+    long type;
+    char text[MAX_TEXT];
+}
+~~~~~~~~
+</script>
+
+- type: 消息的类型，发送或接收时需要明确，同时可以改变消息优先级
+
+- text: 消息内容
+
+### 消息队列的创建
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+int msgget(key_t key, int msgflg);
+~~~~~~~~
+</script>
+
+- key: 新建常用`IPC_PRIVATE` 或者利用`ftok()`函数获得       // TODO
+
+- msgflg: 操作指令，当想要创建一个消息队列时可以填IPC_CREAT | 0644，前面指的是创建的指令，后面的0644指的是消息队列的执行权限
+
+- 返回操作的队列id，或错误-1
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/types.h>
+#include <sys/ipc.h>
+key_t ftok(const char *pathname, int proj_id)   // file to key
+~~~~~~~~
+</script>
+
+- pathname: 指定的文件名及其目录，此文件必须存在且可存取
+
+- proj_id: 常用0// TODO ?
+
+
+### 消息队列的发送
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+int msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);
+~~~~~~~~
+</script>
+
+- msqid: 消息队列的id
+
+- msgp: 自定义结构体
+
+- msgsz: 发送数据大小，**注意是`struct msgBuf.text`大小**
+
+- msgflg: 一组标志位, 0即可
+
+- 返回值: 成功0，失败-1
+
+### 消息队列的接收
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+ssize_t msgrcv(int msqid, void *msgp, size_t msgsz, long msgtyp,int msgflg);
+~~~~~~~~
+</script>
+
+- msgtyp: 数据类型
+
+- 返回值: 成功返回读取数据的大小，失败-1
+
+!!! Note: 数据队列有三个上限
+    每个数据最大长度上限（MSGMAX）        /proc/sys/kernel/msgmax
+
+    每个数据队列的总字节数上限（MSGMNB）   /proc/sy/kernel/msgmnb
+
+    系统上消息队列的总数的上限（MSGMNI）   /proc/sys/kernel/msgmni
+
+### 消息队列的的控制
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+int msgctl(int msqid, int command, struct msqid_ds *buf);
+~~~~~~~~
+</script>
+
+- command: 控制选项，可以为下面三个中的一个
+
+    - IPC_STAT：把msqid_ds结构中的数据设置为消息队列的当前关联值，即用消息队列的当前关联值覆盖shmid_ds的值。
+
+    - IPC_SET：如果进程有足够的权限，就把消息队列的当前关联值设置为msqid_ds结构中给出的值
+
+    - IPC_RMID：删除消息队列
+
+### 消息队列的查看
+
+通过 `ipcs -q` 命令查看已经创建的消息队列，包括key值信息，id信息，拥有者信息，文件权限信息，已使用的字节数，和消息条数。
+
+最后也可以使用 `ipcrm -Q` 加消息队列的`key`值，来删除一个消息队列
+
+
+### 消息队列于有名管道的区别
+
+- 消息队列可以独立于发送和接收进程而存在，从而消除了在同步命名管道的打开和关闭时可能产生困难。 
+- 通过发送消息还可以避免命名管道的同步和阻塞问题，不需要由进程自己来提供方法。
+- 接收程序可以通过消息类型有选择地接收 数据，而不是像命名管道中那样只能默认过消息类型有选择地接收数据
+
+## 消息队列的单向传输
+
+两程序提前约定好msgKey以及msgType
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+
+~~~~~~~~
+</script>
+
+运行结果如图
+
+![](./pic/4-1.png)
+
+发现如果有之前残留的数据信息再消息队列中，下一次仍然会先读取出来
+
+## 消息队列的双向传输
+
+程序类似
+
+运行结果如图
+
+![](./pic/4-2.png)
+
+
+# 共享内存方式
+
+## 补充
+
+### 共享内存
+
+共享内存就是允许两个或多个进程共享一定的存储区
+
+!!! Warning
+    共享内存没有任何的同步与互斥机制，所以要使用信号量来实现对共享内存的存取的同步
+
+### 共享内存的创建
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+int shmget(key_t key, size_t size, int shmflg);
+~~~~~~~~
+</script>
+
+- key: 新建常用`IPC_PRIVATE` 或者利用`ftok()`函数获得       // TODO
+
+- size: 共享内存大小，一般为sizeof(结构体)或者页大小的整数倍(页大小为4K)
+
+- msgflg: 操作指令，当想要创建一个消息队列时可以填IPC_CREAT | IPC_EXCL，则可以创建一块新的空间， 同样可以加入权限限定数，如0644等
+
+- 返回共享内存id，或错误-1
+
+### 共享内存的访问启动
+
+创建完共享内存时，它还不能被任何进程访问，shmat函数的作用就是用来启动对该共享内存的访问，并把共享内存连接到当前进程的地址空间
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+void *shmat(int shm_id, const void *shm_addr, int shmflg);
+~~~~~~~~
+</script>
+
+- shm_id: 共享内存的id
+
+- shm_addr: 指定共享内存连接到当前进程中的地址位置，通常为`NULL`，表示让系统来选择共享内存的地址。
+
+- shmflg: 一组标志位, 0即可
+
+- 返回值: 成功返回指向共享内存第一个字节的指针，失败NULL
+
+### 共享内存的分离
+
+将共享内存从当前进程中分离。与`shmat`相反
+
+!!! Warning
+    将共享内存分离并不是删除它，只是使该共享内存对当前进程不再可用
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+int shmdt(const void *shmaddr);
+~~~~~~~~
+</script>
+
+- shmaddr: `shmat`函数返回的地址指针
+
+### 共享内存的控制
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+int shmctl(int shm_id, int command, struct shmid_ds *buf);
+~~~~~~~~
+</script>
+
+- shm_id: 共享内存id，即shmget的返回值
+
+- command: 可以为下面三个中的一个
+
+    - IPC_STAT：把shmid_ds结构中的数据设置为共享内存的当前关联值，即用共享内存的当前关联值覆盖shmid_ds的值。
+
+    - IPC_SET：如果进程有足够的权限，就把共享内存的当前关联值设置为shmid_ds结构中给出的值
+
+    - IPC_RMID：删除共享内存段
+
+- buf: 一个结构指针，指向共享内存模式和访问权限的结构
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+struct shmid_ds{
+    uid_t shm_perm.uid;
+    uid_t shm_perm.gid;
+    mode_t shm_perm.mode;
+};
+~~~~~~~~
+</script>
+
+
+## 共享内存的单向传输
+
+运行结果如图
+
+![](./pic/5-1.png)
+
+
+## 共享内存的双向传输
+
+注意，**没有加入互锁变量**，程序仅通过sleep控制共享内存的读写顺序，失败！
+
+运行结果如图
+
+![](./pic/5-2.png)
+
+由于共享内存是内存上的一段共享数据区，根据shmID便可申请访问读写，因此可以在不同进程、父子进程间访问
+
+
+# Unix套接字方式
+
+## 补充
+
+### Unix套接字
+
+Unix套接字可以理解为类似于socket通信方式
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+int socket (int domain, int type, int protocol);
+~~~~~~~~
+</script>
+
+与TCP socket的区别：
+
+- 在创建socket的时候，`domain`要设置为`AF_UNIX`或`AF_LOCAL`,而不是TCP/IP套接字的`AF_INET`
+
+- type为标识套接字类型，分为流套接字（SOCK_STREAM）和数据包套接字（SOCK_DGRAM），由于都是在本机通过内核通信，所以SOCK_STREAM和SOCK_DGRAM都是可靠的
+
+- 在Unix域套接字中，套接字的地址是以sockaddr_un结构体来表示的
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+struct sockaddr_un {
+    sa_family_t sun_family;
+    char sun_path[108];
+}
+~~~~~~~~
+</script>
+
+## Unix套接字的单向传输
+
+运行结果如图
+
+![](./pic/5-1.png)
+
+
+## Unix套接字的双向传输
+
+注意，**没有加入互锁变量**，程序仅通过sleep控制Unix套接字的读写顺序，失败！
+
+运行结果如图
+
+![](./pic/5-2.png)
+
+
+
+
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="../lib/markdeep.min.js"></script>
+<script src="../lib/jquery-3.3.1.min.js"></script>
+
+<script type="text/javascript">
+    $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
+</script>
+
+<style>
+    /* .md h2::before{
+        content: counter(h2, lower-alpha)
+    }
+
+    .md h2.notinc::before{
+        counter-increment: none;
+        content: none
+    }
+
+    div.notinc1 h1::before{
+        counter-increment: none;
+        content: "2*"
+    }
+
+    .md h1.notinc::before{
+        counter-increment: none;
+    } */
+
+    .md .image {
+        width: 80%;
+    }
+
+    .md img {
+        border: 1.3px rgb(0, 0, 0) solid;
+    }
+
+    .md div.imagecaption {
+        text-align: center;
+    }
+
+    /* .level2 .tocnumber {
+        display: none
+    } */
+
+    .md code {
+        background-color: rgba(255, 249, 158, 0.788);
+        color: rgb(145, 52, 40);
+    }
+
+    .md pre code {
+        background: none;
+        /* background-color: rgb(250, 238, 224); */
+        /* border: 1.0px rgb(0, 0, 0) solid; */
+    }
+
+    body {
+        font-family: 等线,Palatino,Georgia,"Times New Roman",serif;
+    }
+</style> 
