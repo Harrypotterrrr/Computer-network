@@ -110,7 +110,7 @@ int main(){
 
 运行结果:
 
-![](./pic/1-1.png)
+![](./pic/1-1.png width=330px)
 
 由于无名管道通过字节流传接数据，因此与数据类型无关，最大长度根据操作系统不同而有所变化，CentOS的最大长度一般为64K
 
@@ -122,7 +122,9 @@ int main(){
 
 ### 特性
 
-- 不仅限于亲子进程之间，可以使互不相关的两个进程互相通信。有名管道可以通过路径名来指出，并且在文件系统中可见：Linux中专门设立了一个专门的特殊文件系统--管道文件，以FIFO的文件形式存在于文件系统中，这样，即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径，就能够彼此通过FIFO相互通信，因此，通过FIFO不相关的进程也能交换数据
+- 不仅限于亲子进程之间，可以使互不相关的两个进程互相通信。有名管道可以通过路径名来指出，并且在文件系统中可见：Linux中专门设立了一个专门的特殊文件系统
+
+- 管道文件，以FIFO的文件形式存在于文件系统中，这样，即使与FIFO的创建进程不存在亲缘关系的进程，只要可以访问该路径，就能够彼此通过FIFO相互通信，因此，通过FIFO不相关的进程也能交换数据
 
 - **半双工的通信模式**，具有固定的读端和写端：传输方向同时只能是一个方向
 
@@ -135,7 +137,7 @@ int mkfifo(const char *pathname, mode_t mode);
 ~~~~~~~~
 </script>
 
-- pathname: **管道路径名(包含管道名，eg:"/tmp/pipe_test")**，指FIFO在文件系统中的名字
+- pathname: 路径名(操作系统中任意路径下的任意文件名，常在`/tmp`下)，指FIFO在文件系统中的名字
 
 - mode: 文件的读写权限，类似于chmod
 
@@ -154,9 +156,9 @@ open(const char *path, int flags);
 
     - O_WRONLY：open将会调用阻塞，除非有另外一个进程以读的方式打开同一个FIFO，否则一直等待
 
-    - O_RDONLY|O_NONBLOCK：如果此时没有其他进程以写的方式打开FIFO，此时open也会成功返回，此时FIFO被读打开，而不会返回错误
+    - O_RDONLY`|`O_NONBLOCK：如果此时没有其他进程以写的方式打开FIFO，此时open也会成功返回，此时FIFO被读打开，而不会返回错误
 
-    - O_WRONLY|O_NONBLOCK：立即返回，如果此时没有其他进程以读的方式打开，open会失败打开，此时FIFO没有被打开，返回-1
+    - O_WRONLY`|`O_NONBLOCK：立即返回，如果此时没有其他进程以读的方式打开，open会失败打开，此时FIFO没有被打开，返回-1
 
 
 ## 父进程向子进程发送数据
@@ -243,7 +245,8 @@ int main(){
 读取/写入完毕，`close()`关闭文件后，再次用写入/读取的方式`open()`打开
 
 运行结果
-![](./pic/2-1.png)
+
+![](./pic/2-1.png width=340px)
 
 ## 两个进程间的单向数据通讯
 
@@ -254,6 +257,7 @@ int main(){
 先启动test4-2-1，程序阻塞等待，再启动test4-2-2，收发正常
 
 运行结果
+
 ![](./pic/2-2.png)
 
 ## 两个进程间的双向数据通讯
@@ -289,7 +293,31 @@ int kill(pid_t pid, int sig);
 
 编号为1 ~ 31的信号为传统UNIX支持的信号，是不可靠信号(非实时的)，编号为32 ~ 63的信号是后来扩充的，称做可靠信号(实时信号)。不可靠信号和可靠信号的区别在于前者不支持排队，可能会造成信号丢失，而后者不会
 
-## 不同进程的信号发送与接收
+## 两进程的信号发送与接收
+
+程序思路如下:
+
+- 利用**有名通道**将test3-1-2的pid发送给test3-1-1
+
+- 两程序均使用阻塞方式`open()`打开，因此可以无关先后地等待对方写入/读取成功
+
+输出结果
+
+![](./pic/3-1.png)
+
+可以观察到在test3-1-1运行的过程中不断给test3-1-2发信号，test3-1-2可以成功接收
+
+当中断test3-1-1后，在bash中用`kill -n pid` 指令，test3-1-2仍可成功接收
+
+## 两进程的信号交互
+
+利用上一问的loadPID、savePID函数，加之简单修改，便可轻易得到对方进程的PID号
+
+之后便是简单的进程通讯的代码，代码略
+
+输出结果
+
+![](./pic/3-2.png)
 
 
 # 信号量方式
@@ -390,45 +418,8 @@ union semun{
 ~~~~~~~~
 </script>
 
-## 消息队列的单向传输
 
-运行结果如图
-
-![](./pic/4-1.png)
-
-发现如果有之前残留的数据信息再消息队列中，下一次仍然会先读取出来
-
-## 消息队列的双向传输
-
-程序类似
-
-程序思路如下:
-
-- 利用有名通道将test3-1-2的pid发送给test3-1-1
-
-- 两程序均使用阻塞方式`open()`打开，因此可以无关先后地等待对方写入/读取成功
-
-- 
-
-<script type="preformatted">
-~~~~~~~~ C++ linenumbers
-#include <sys/types.h>
-#include <signal.h>
-int kill(pid_t pid, int sig);
-~~~~~~~~
-</script>
-
-
-
-
-
-
-
-运行结果如图
-
-![](./pic/4-2.png)
-
-
+由于老师并没要求此进程通讯方式，故不深入研究/编程实现
 
 # 消息队列方式
 
@@ -552,19 +543,15 @@ int msgctl(int msqid, int command, struct msqid_ds *buf);
 
 ### 消息队列于有名管道的区别
 
-- 消息队列可以独立于发送和接收进程而存在，从而消除了在同步命名管道的打开和关闭时可能产生困难。 
-- 通过发送消息还可以避免命名管道的同步和阻塞问题，不需要由进程自己来提供方法。
+- 消息队列可以独立于发送和接收进程而存在，从而消除了在同步命名管道的打开和关闭时可能产生困难
+
+- 通过发送消息还可以避免命名管道的同步和阻塞问题，不需要由进程自己来提供方法
+
 - 接收程序可以通过消息类型有选择地接收 数据，而不是像命名管道中那样只能默认过消息类型有选择地接收数据
 
 ## 消息队列的单向传输
 
 两程序提前约定好msgKey以及msgType
-
-<script type="preformatted">
-~~~~~~~~ C++ linenumbers
-
-~~~~~~~~
-</script>
 
 运行结果如图
 
@@ -724,22 +711,441 @@ struct sockaddr_un {
 ~~~~~~~~
 </script>
 
-## Unix套接字的单向传输
-
-运行结果如图
-
-![](./pic/5-1.png)
-
-
 ## Unix套接字的双向传输
 
-注意，**没有加入互锁变量**，程序仅通过sleep控制Unix套接字的读写顺序，失败！
+server端的代码如下：
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <iostream>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+#include <cstdlib>
+#include <fcntl.h>
+#include <sys/un.h>
+
+using namespace std;
+
+
+#define MAX_FD   20
+#define BUFFER_SIZE (1024)
+#define PATH_NAME "/tmp/test"
+
+extern int errno;
+char * error_messg;
+
+void myExit(){
+    error_messg = strerror(errno);
+    cerr << error_messg <<endl;
+    exit(EXIT_FAILURE);
+}
+
+void setReusePort(int *fd)
+{
+    int enable = 1;
+    if (setsockopt(*fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
+        myExit();
+}
+
+int main()
+{
+    int server_fd, connect_fd;
+    struct sockaddr_un myAddr, otherAddr;
+
+    if((server_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+        myExit();
+
+    setReusePort(&server_fd);
+
+    myAddr.sun_family = AF_UNIX;
+    strcpy(myAddr.sun_path, PATH_NAME);
+    remove(myAddr.sun_path);
+
+    if(bind(server_fd,(struct sockaddr*)&myAddr,sizeof(myAddr)) == -1)
+        myExit();
+
+    if(listen(server_fd, MAX_FD) == -1)
+        myExit();
+    
+    socklen_t len_otherAddr = sizeof(sockaddr_un);
+    if((connect_fd = accept(server_fd, (struct sockaddr*)&otherAddr, &len_otherAddr)) == -1)
+        myExit();
+
+    const int sendLength = 10;
+    char sendbuff[sendLength] = "\0";
+    char recvbuff[BUFFER_SIZE] = "\0";
+    const char tmp_str[] = "123456789";
+    strcpy(sendbuff, tmp_str);
+    int ctr_recv_byte = 0, ctr_send_byte = 0;
+
+    while(true){
+        int tmp_rtn = send(connect_fd, sendbuff, sendLength, 0);
+        if(tmp_rtn == -1)
+            myExit();
+        ctr_send_byte += tmp_rtn;
+        cout << sendbuff << " have sent to test6-1-2: " << endl;
+        cout << ctr_send_byte << " bytes have sent "<< endl;
+
+        cout <<"-----------------------"<<endl;
+        sleep(1);
+        int tmp_recv = recv(connect_fd, recvbuff, sizeof(recvbuff), 0);
+        if(tmp_recv == -1)
+            myExit();
+        ctr_recv_byte += tmp_recv;
+        cout << recvbuff << " have recieved from test6-1-2: " << endl;
+        cout << ctr_recv_byte << " bytes have recieved" << endl;
+        
+        cout <<"-----------------------"<<endl;
+        sleep(1);
+    }
+
+    close(connect_fd);
+    close(server_fd);
+    return 0;
+}
+
+~~~~~~~~
+</script>
+
+client端的代码如下：
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#include <iostream>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+#include <cstdlib>
+#include <fcntl.h>
+#include <sys/un.h>
+
+using namespace std;
+
+
+#define BUFFER_SIZE (100)
+#define PATH_NAME "/tmp/test"
+
+extern int errno;
+char * error_messg;
+
+void myExit(){
+    error_messg = strerror(errno);
+    cerr << error_messg <<endl;
+    exit(EXIT_FAILURE);
+}
+
+void setReusePort(int *fd)
+{
+    int enable = 0;
+    if (setsockopt(*fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
+        myExit();
+}
+
+int main(int argc,char* argv[])
+{
+    int client_fd;
+    struct sockaddr_un otherAddr;
+
+    if((client_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+        myExit();
+
+    setReusePort(&client_fd);
+
+    otherAddr.sun_family = AF_UNIX;
+    strcpy(otherAddr.sun_path, PATH_NAME);
+
+    // unlink(otherAddr.sun_path);
+    if(connect(client_fd, (struct sockaddr *)&otherAddr, sizeof(otherAddr)) == -1)
+        myExit();
+
+    const int sendLength = 10;
+    char sendbuff[sendLength] = "\0";
+    char recvbuff[BUFFER_SIZE] = "\0";
+    const char tmp_str[] = "987654321";
+    strcpy(sendbuff, tmp_str);
+    int ctr_recv_byte = 0, ctr_send_byte = 0;
+
+    while(true){
+        int tmp_recv = recv(client_fd, recvbuff, sizeof(recvbuff), 0);
+        // MSG_WAITALL will let the recv plugged until the buffer full
+        if(tmp_recv == -1)
+            myExit();
+        ctr_recv_byte += tmp_recv;
+        cout << recvbuff << " have recieved from test6-1-1: " << endl;
+        cout << ctr_recv_byte << " bytes have recieved" << endl;
+
+        cout <<"-----------------------"<<endl;
+        sleep(1);
+        int tmp_rtn = send(client_fd, sendbuff, sendLength, 0);
+        if(tmp_recv == -1)
+            myExit();
+        ctr_send_byte += tmp_rtn;
+        cout << sendbuff << " have sent to test6-1-1: " << endl;
+        cout << ctr_send_byte << " bytes have sent "<< endl;
+
+        cout <<"-----------------------"<<endl;
+        sleep(1);
+    }
+
+    close(client_fd);
+    return 0;
+}
+~~~~~~~~
+</script>
+    
+代码说明:
+
+- client端可以绑定`bind()`，但是不能与server端绑定相同的套接字，否则会出现`Address reuse` 的错误，因为两个不是通过绑定相同的套接字通信，而是client端通过申请链接`connect()` server端的套接字从而得到通讯的
+
+- 阻塞的双向传输不能使用MSG_WAITALL，因为这会使`recv/read`阻塞直到缓冲区读/写满才返回
+
+- 使用UNIX套接字编程，避免`Address reuse`错误，设置`SO_REUSEADDR`是无效的，只能通过删除`remove(myAddr.sun_path);`来使得如果程序中断退出后重新新建套接字不报错
+
+- 对比TCP下的链接，是client端请求链接到server端的ip；UNIX下的链接，是client端请求链接到server端的套接字（这个套接字由server端`bind()`函数生成）
 
 运行结果如图
 
-![](./pic/5-2.png)
+![](./pic/6-1.png)
 
 
+# 文件锁机制
+
+## 补充
+
+### flock()
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/file.h>
+int flock(int fd, int operation);  // Apply or remove an advisory lock on the open file specified by fd
+~~~~~~~~
+</script>
+
+- operation: 
+    
+    - LOCK_SH: 共享锁，多个进程可以使用同一把锁，常被用作读共享锁
+
+    - LOCK_EX: 排他锁，同时只允许一个进程使用，常被用作写排他锁
+
+    - LOCK_UN: 解锁
+
+    - LOCK_NB: 非阻塞（与以上三种操作一起使用，用位操作）
+
+- 返回值: 正确 0， 发现已被锁 -1，同时erron = EWOULDBLOCK 
+
+### fcntl()
+
+fcntl是文件控制函数，它可以对已打开的文件进行包括管理文件锁、获得和设置文件描述符标志、获得和设置文件状态标志、文件描述符的复制等很多操作
+
+<script type="preformatted">
+~~~~~~~~ C++ 
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
+int fcntl(int fd, int cmd); 
+int fcntl(int fd, int cmd, long arg); 
+int fcntl(int fd, int cmd, struct flock *lock);
+~~~~~~~~
+</script>
+
+- cmd: 命令，其中有关文件锁的命令数有一下几个
+
+    - F_DUPFD: 复制一个现存的描述符
+
+    - F_GETFL: 读取open选项，即在open时设置的O_RDONLY等)
+ 
+    - F_SETFL: 设置open选项，重置选项为arg
+
+    - F_GETFD: 读取文件描述字，返回描述字为arg
+ 
+    - F_SETFD: 设置文件描述字，描述字为arg
+ 
+    - F_GETLK: 读取文件锁，返回属性为lock
+ 
+    - F_SETLK(W): 设置文件锁(wait，阻塞版本)，锁属性为lock
+
+    - F_UNLCK: 释放文件锁
+
+- lock: 为锁结构体
+ 
+<script type="preformatted">
+~~~~~~~~ C++ 
+struct flock{short l_type;
+    short l_whence;
+    off_t l_start;
+    off_t l_len;
+    pid_t l_pid;
+}
+~~~~~~~~
+</script>
+
+- l_type: 所类型
+    
+    - F_RDLCK: 共享锁
+
+    - F_WRLCK: 排斥锁
+
+    - F_UNLCK: 解锁
+
+- l_whence: 基准位置
+
+    - SEEK_SET: 文件的开头
+
+    - SEEK_CUR: 当前位置
+
+    - SEEK_END: 文件的结尾
+
+- l_start: 相对偏移量
+
+- l_len: 加锁区域长度
+
+- l_pid: 加锁进程号（l_type为F_GELCK时使用）
+
+
+### flock(),lockf(),fcntl()的区别
+
+- 首先`flock`和fcntl是系统调用，而`lockf`是库函数，实际上是`fcntl`的封装，所以`lockf`和`fcntl`的底层实现是一样的，对文件加锁的效果也是一样的。
+
+- `flock`函数只能对整个文件上锁，`fcntl`可以对文件的一部分上锁
+
+- `flock`只能产生劝告性锁
+
+- `flock`可以有共享锁和排它锁，`lockf`只支持排它锁，但是fcntl里面参数flock可以有RDLCK读锁
+
+- `flock`不能在NFS文件系统上使用，如果要在NFS使用文件锁，需使用`fcntl`
+
+## 阻塞方式的文件写读
+
+**使用`flock()`函数实现**
+
+将文件锁设置为写排斥锁
+
+写文件核心部分代码如下:
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+if((fd = open(FILE_PATH, O_CREAT | O_RDWR, 0666)) == -1)
+        myExit();
+    
+std::cout << "wait for locking" << std::endl;
+if(flock(fd, LOCK_EX) != 0){
+    std::cerr << "lock the file failed caused by locked by other" << std::endl;
+    myExit();
+}
+
+std::cout << "the file has been locked" << std::endl;
+
+sleep(3);
+
+char buffer[MAX_BUF];
+strcpy(buffer, "0123456789");
+int write_len = write(fd, buffer, strlen(buffer) + 1);
+std::cout << write_len << " bytes has been written" <<std::endl;
+~~~~~~~~
+</script>
+
+读文件核心代码如下：
+
+将文件锁设置为读共享锁
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+std::cout << "wait for locking" << std::endl;
+    if(flock(fd, LOCK_EX) != 0)
+        std::cerr << "lock the file failed caused by locked by other" << std::endl;
+
+    std::cout << "the file has been locked" << std::endl;
+
+    sleep(3);
+
+    char buffer[MAX_BUF];
+    read(fd, buffer, sizeof(buffer));
+    int read_len = strlen(buffer) + 1;
+    std::cout << read_len << " bytes has been read" <<std::endl;
+~~~~~~~~
+</script>
+
+结果如下:
+
+![](./pic/7-1.png)
+
+
+## 非阻塞方式的文件写读
+
+**使用`fcntl()`函数实现**
+
+根据上锁种类，上锁函数为
+
+注意`F_GETLK` 参数为测试能否上`lock.l_type`种类的锁，如果可以，则将`lock.l_type` 设置为`F_UNLCK`，其余参数不变
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+void setLock(int fd, int type)
+{
+    struct flock lock;
+    lock.l_whence = SEEK_SET;
+    lock.l_start = 0;
+    lock.l_len = 0; // lock the whole file
+    lock.l_type = type;
+
+    fcntl(fd, F_GETLK, &lock);
+    if (lock.l_type != F_UNLCK) {  
+        if (lock.l_type == F_RDLCK) 
+            std::cout << "Read lock already set by " << lock.l_pid << std::endl;
+        else if (lock.l_type == F_WRLCK)   
+            std::cout << "write lock already set by " << lock.l_pid << std::endl;
+        do{
+            std::cout << "wait 1sec for the file unlocked" << std::endl;
+            sleep(1);
+            fcntl(fd, F_GETLK, &lock);
+        }while(lock.l_type != F_UNLCK);
+    }
+
+    lock.l_type = type; // ATTENTION TO reset the l_type to TYPE agian!
+
+    if(fcntl(fd, F_SETLK, &lock) == -1)
+        myExit();
+    
+    switch(lock.l_type){
+        case F_RDLCK:  
+            std::cout << "read lock is set by " << getpid() << std::endl; break;
+        case F_WRLCK:  
+            std::cout << "write lock is set by " << getpid() << std::endl; break;
+        case F_UNLCK:
+            std::cout << "unlock set by " << getpid() << std::endl; break;
+        default: break;
+    }
+}
+~~~~~~~~
+</script>
+
+结果如下:
+
+![](./pic/7-2.png)
+
+结果表明开始非阻塞的读文件因为文件被上写锁而不能进行读取，等3s写锁开启后，便可上读锁、正常读取
+
+## 文件阻塞/非阻塞的读/写锁总结
+
+- 无论阻塞与否，结果相同
+
+- 使用flock()函数: read函数读空，write函数写空
+
+- 使用fctnl()函数: read函数读空，write函数失败
+
+!!! ERROR
+    // TODO
 
 
 
