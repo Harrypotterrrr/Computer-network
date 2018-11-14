@@ -38,7 +38,7 @@ void savePID()
     if((pipe_fd = open(FIFO_NAME, O_WRONLY)) == -1)
         myExit();
     write(pipe_fd, buffer, strlen(buffer) + 1);
-
+    std::cout << buffer << "# has been successfully written" << std::endl;
     close(pipe_fd);
 }
 
@@ -50,20 +50,16 @@ void caputure_con(int sig)
 void caputure_end(int sig)
 {
     std::cout << sig << " have been successfully caputured " << std::endl;
-    std::cout << "Program exit" << std::endl;
-    // exit(EXIT_SUCCESS);
+    // std::cout << "Program exit" << std::endl;
+    exit(EXIT_SUCCESS);
 }
 
 int main()
 {
     savePID();
 
-    for(int i=1 ; i<=64 ; i++)
+    for(int i=34 ; i<=64 ; i++)
         signal(i, caputure_con);
-    // signal(SIGUSR1, caputure_con);
-    // signal(SIGUSR2, caputure_con);
-    // signal(SIGALRM, caputure_con);
-    // signal(SIGTTIN, caputure_end);
 
     while(true)
         sleep(1);
