@@ -285,12 +285,24 @@ int main(int argc,char* argv[])
                 case -1:    // alarm ring to arouse the -1 return of select function
                     if(errno != EINTR)
                         myExit();
-                    sSend(count , cfd)
+
                 case 0: break;
                 default:
                     if(FD_ISSET(server_fd, &read_fds))
                         createNewConnect();
-                    sRecv(count , cfd, * cMsg )
+                    for(int i=0 ; i < ctr_client; i++){
+                        if(FD_ISSET(clientInfo[i].cfd, &read_fds) && clinetInfo[i].count % 2){
+                            sRecv(clinetInfo[i].count, clientInfo[i].cfd, &clientInfo[i].msg);
+                            FD_SET(clientInfo[i].cfd, &write_fds);  // TODO
+                        }
+                    }
+
+                    for(int i=0 ; i < ctr_client; i++){
+                        if(FD_ISSET(clientInfo[i].cfd, &write_fds) && clinetInfo[i].count % 2 == 0){
+                            sSend((clinetInfo[i].count, clientInfo[i].cfd);
+                        }
+                    }
+
             }
         }
     }
