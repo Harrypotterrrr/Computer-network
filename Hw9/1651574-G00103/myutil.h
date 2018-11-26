@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <stdio.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -12,6 +13,7 @@
 #include <netdb.h>
 #include <sys/shm.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -21,9 +23,16 @@ using namespace std;
 
 #define GETSTUNO 0
 #define GETPID 1
-#define GETIME 2
+#define GETTIME 2
 #define GETSTR 3
 #define END 4
+
+#define DEAD -1
+#define DONE 0
+#define ALIVE 1 
+#define WAITWRITE 2 
+
+
 
 extern int errno;
 
@@ -41,18 +50,30 @@ struct ClientMsg{
 	int clientPid ;
 	char clientTime [20];
 	char randomMsg [100000];
+	//char * randomMsg ;
 	int randomMsgLen ;  //32768-99999
 
 };
 
+struct ClientInfo{
+	int cfd ;
+	int count ;
+	ClientMsg msg;
+	int flag  ; 
+	int rwLen ;
+};
 
 
-// bool sSnd(int count , int cfd );
+void myExit();
 
-// bool sRecv(int  count , int cfd , struct ClientMsg * cMsg);
+void setReusePort(int fd);
 
+void setNonBlock(int fd);
+
+bool writeFile(const ClientInfo & cinfo, bool);
+
+bool testConnect(const int cfd);
+
+void setTime(timeval &timeout, int sec, int usec = 0) ;
 
 int parseCMD(int argc, char **argv ,int isClient );
-
-
-bool mySndMsg(int cfd ,const  void * Msg, int MsgLen );

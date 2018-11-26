@@ -1,312 +1,436 @@
-#include "myutil.h"
+#include <fstream>
+#include <sys/prctl.h>
 #include "server.h"
 
-char * error_messg;
-
-
-ClientInfo clientInfo[MAX_CONNECT]
-
-
-int server_fd, connect_fd[MAX_CONNECT];
-struct sockaddr_in server_addr, client_addr;
+int ctr_clinet = 0;
+int max_fd, server_fd;
+int max_clientinfo;
+//ClientInfo clientinfos[SERVER_MAX_CONNECT];
+ClientInfo * clientinfos ; 
 fd_set read_fds, write_fds;
 
-int ctr_client = 0;     // the counter of client
-bool flag_client[MAX_CONNECT];   // record the valid of client_fd, whether alive or not
+using namespace std;
 
-char send_buff[MAX_CONNECT][LEN_SEND];   // the buffer of send
-char recv_buff[MAX_CONNECT][BUFFER_SIZE];    // the buffer of recv
+void serverInit()
+{
+	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		myExit();
 
-struct timeval wait_time;   // select wait_time
+	max_fd = server_fd;
+	//memset(clientinfos, 0, sizeof(clientinfos));
+	FD_ZERO(&read_fds);
+	FD_ZERO(&write_fds);
+	FD_SET(server_fd, &read_fds);
 
-int ctr_recv_byte[MAX_CONNECT], ctr_send_byte[MAX_CONNECT];   // counter of recv/send byte
+	if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
+		myExit();
 
-int max_fd; // record the maximum of fd
+	if (listen(server_fd, MAX_LISTEN)==-1)
+		myExit();
 
+	if (!flag_block)
+		setNonBlock(server_fd);
 
-void myExit(){
-    error_messg = strerror(errno);
-    cerr << error_messg <<endl;
-    exit(EXIT_FAILURE);
+	setReusePort(server_fd );
+
+	return;
 }
 
-void writeWait(int sig)
+int selectNewClientinfo()
 {
-    FD_ZERO(&write_fds);
-    for(int i=0 ; i<ctr_client ; i++){
-        if(!flag_client[i])
-            continue;
-        FD_SET(connect_fd[i], &write_fds);
-    }
-    alarm(1);
+	int i;
+	for (i = 0; i < SERVER_MAX_CONNECT; i++)
+	{
+		if (clientinfos[i].flag == DONE || clientinfos[i].flag == DEAD)
+			return i;
+	}
+	return -1 ;
 }
 
-void init()
+bool  createNewConnect()
 {
-    max_fd = server_fd;
-    for(int i=0 ; i<MAX_CONNECT ; i++){
-        ctr_client = 0;
-        flag_client[i] = false;
-        strcpy(send_buff[i],"123456789");
-        recv_buff[i][0] = '\0';
-        ctr_recv_byte[i] = ctr_send_byte[i] = 0;
-    }
-    if(!flag_block){
-        wait_time.sec = 1;
-        wait_time.usec = 0;
-    }
+	struct sockaddr_in client_addr;
+	socklen_t len_client_addr = sizeof(client_addr);
+
+	int i = selectNewClientinfo();
+	if (i < 0)
+	{
+		cerr << "no clientinfo , please wait !\n";
+		return false;
+	}
+
+	int cfd = accept(server_fd, (struct sockaddr *)&client_addr, &len_client_addr);
+	if (cfd < 0)
+	{
+		cerr << "accept failed !\n";
+		return false ;
+	}
+
+	clientinfos[i].cfd = cfd;
+	clientinfos[i].flag = ALIVE;
+	clientinfos[i].count = 0;
+	clientinfos[i].rwLen = 0;
+	memset(&(clientinfos[i].msg), 0, sizeof(clientinfos[i].msg));
+
+	if (1)
+	{
+		cout << "connect ok , i= " << i << endl;
+	}
+
+	FD_SET(cfd, &read_fds);
+	FD_SET(cfd, &write_fds);
+
+	if (i > max_clientinfo)
+		max_clientinfo = i;
+
+	max_fd = max_fd > cfd ? max_fd : cfd;
+
+	if (!flag_block)
+		setNonBlock(cfd);
+
+	return true ;
 }
 
-void printServerInfo()
+void killClient(ClientInfo &cinfo)
 {
-    cout << "=============================\n";
-    cout << "The socket binds to:"<< endl;
-    cout << "IP: " << inet_ntoa(server_addr.sin_addr) << endl;
-    cout << "port: " << ntohs(server_addr.sin_port) <<endl;
-    cout << "==============================\n";
-}
-
-void printClientInfo(int no)
-{
-    cout << "------------------------------"<<endl;
-    cout << "[#No. " << no <<"]: connection succeed!"<<endl;
-    cout << "[#No. "<< no<<"]: client IP: "<<inet_ntoa(client_addr.sin_addr)<<"\tport: "<<ntohs(client_addr.sin_port)<<endl;
-    cout << "------------------------------"<<endl;
-}
-
-void setReusePort()
-{
-    int enable = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) == -1)
-        myExit();
-}
-
-void setNonBlock(int *fd, int tag)
-{
-    int flag;
-    if((flag = fcntl(*fd, F_GETFL, 0)) == -1)
-        myExit();
-    if(fcntl(*fd, F_SETFL, flag | O_NONBLOCK) == -1)
-        myExit();
-
-    cout << "set " << (tag == 0 ? "server" : "client") << " non-block succeed" << endl;
+	if(cinfo.count>8)
+	{
+		if(writeFile(cinfo, true)==false)
+			return ;
+		//cout<<"ready write \n";
+	}
+	cinfo.flag = DEAD;
+	close(cinfo.cfd);
+	FD_CLR(cinfo.cfd, &read_fds);
+	FD_CLR(cinfo.cfd, &write_fds);
+	/*
+	if (cinfo.msg.randomMsgLen && cinfo.msg.randomMsg)
+	{
+		free(cinfo.msg.randomMsg);
+		//delete cinfo.msg.randomMsg;
+		cinfo.msg.randomMsg = NULL;
+	}
+	*/
+	return;
 }
 
 
-void sendMsg()
+bool sSend(ClientInfo &cinfo)
 {
-    for(int i=0 ; i < ctr_client ; i++){
-        if(!flag_client[i])
-            continue;
-        if(FD_ISSET(connect_fd[i], &write_fds)){
-            FD_CLR(connect_fd[i], &write_fds);
-            int tmp_rtn = send(connect_fd[i], send_buff[i], LEN_SEND, MSG_DONTWAIT);
-            if(tmp_rtn < 1){
-                cout<<"[No. " << i <<"]: the end of conversation" <<endl;
-                flag_client[i] = false;
-                close(connect_fd[i]);
-            }
+	static char strMsg[10];
+	int count = cinfo.count / 2;
 
-            ctr_send_byte[i] += tmp_rtn;
-            cout<<"[No. " << i <<"]: send to client: " << send_buff[i] << endl;
-            cout<<"[No. " << i <<"]: "<< ctr_send_byte[i] << " bytes have sent " << endl;
-        }
-    }
+	const char *sndMsg;
+
+	if (count == GETSTR)
+	{
+		if (cinfo.msg.randomMsgLen == 0)
+		{
+			cinfo.msg.randomMsgLen = 32768 + ((rand() + 1e-6) / RAND_MAX * 67231);
+			/*
+			cinfo.msg.randomMsg = (char *)malloc(cinfo.msg.randomMsgLen * sizeof(char));
+			if (cinfo.msg.randomMsg == NULL)
+			{
+				cerr << "malloc error , please wait \n";
+				cinfo.msg.randomMsgLen = 0;
+				return false;
+			}
+			*/
+		}
+
+		sprintf(strMsg, "str%d", cinfo.msg.randomMsgLen);
+		sndMsg = strMsg;
+	}
+	else
+		sndMsg = orderMsg[count];
+
+	int MsgLen = strlen(sndMsg);
+
+	if(count==GETTIME||count==GETSTR)
+		MsgLen ++;
+
+	int sndNum = send(cinfo.cfd, sndMsg + cinfo.rwLen, MsgLen - cinfo.rwLen, 0);
+
+	if (sndNum < 0)
+	{
+		// TODO
+		cerr << "cllient_cfd :" << cinfo.cfd << "snd error !\n";
+		killClient(cinfo);
+		return false;
+	}
+
+	cinfo.rwLen += sndNum;
+
+	if (cinfo.rwLen == MsgLen)
+	{
+		cinfo.count++;
+		cinfo.rwLen = 0;
+	}
+	else if (cinfo.rwLen >MsgLen)
+	{
+		killClient(cinfo);
+		return false ;
+	}
+
+	//printf("send success , cfd = %d,count = %d \n", cinfo.cfd,cinfo.count);
+	return true;
 }
 
-void recvMsg()
+bool sRecv(ClientInfo &cinfo)
 {
-    for(int i=0 ; i < ctr_client ; i++){
-        if(!flag_client[i])
-            continue;
-        if(FD_ISSET(connect_fd[i], &read_fds)){
-            FD_CLR(connect_fd[i], &read_fds);
-            int tmp_rtn = recv(connect_fd[i], recv_buff[i], sizeof(recv_buff[i]), MSG_DONTWAIT);
-            if(tmp_rtn < 1){
-                cout << "------------------------------"<<endl;
-                cout<<"[No. " << i <<"]: the end of conversation" <<endl;
-                cout << "------------------------------"<<endl;
-                flag_client[i] = false;
-                close(connect_fd[i]);
-            }
-            
-            ctr_recv_byte[i] += tmp_rtn;
-            cout<<"[No. " << i <<"]: recieve from client: " << recv_buff[i] << endl;
-            cout<<"[No. " << i <<"]: "<< ctr_recv_byte[i] << " bytes have recieved " << endl;
-        }
-    }
+	
+	if (cinfo.count > 8)
+	{
+		cout << "client " << cinfo.cfd << "ok !\n";
+		cinfo.flag = DONE ;
+		killClient(cinfo);
+		return true ;
+	}
+
+
+	int count = cinfo.count / 2;
+	int MsgLen;
+	int readNum;
+
+	switch (count)
+	{
+	case GETSTUNO:
+		MsgLen = sizeof(int);
+		readNum = recv(cinfo.cfd, &(cinfo.msg.StuNo) + cinfo.rwLen, MsgLen, 0);
+		break;
+	case GETPID:
+		MsgLen = sizeof(int);
+		readNum = recv(cinfo.cfd, &(cinfo.msg.clientPid) + cinfo.rwLen, MsgLen, 0);
+		break;
+	case GETTIME:
+		MsgLen = 19;
+		readNum = recv(cinfo.cfd, (cinfo.msg.clientTime) + cinfo.rwLen, MsgLen, 0);
+		break;
+	case GETSTR:
+		MsgLen = cinfo.msg.randomMsgLen;
+		//readNum = recv(cinfo.cfd,(cinfo.msg.randomMsg)+cinfo.rwLen,MsgLen,)
+		readNum = recv(cinfo.cfd, (cinfo.msg.randomMsg) + cinfo.rwLen, MsgLen, 0);
+		break;
+	}
+	if (readNum <= 0)
+	{ // TODO
+		cerr << "cllient_cfd :" << cinfo.cfd << "recv error !\n";
+		killClient(cinfo);
+		return false;
+	}
+
+	cinfo.rwLen += readNum;
+	if (cinfo.rwLen == MsgLen)
+	{
+		if(count==GETSTUNO)
+			cinfo.msg.StuNo = ntohl(cinfo.msg.StuNo);
+		else if(count == GETPID)
+			cinfo.msg.clientPid= ntohl(cinfo.msg.clientPid);
+		else if (count == GETTIME)
+			cinfo.msg.clientTime[MsgLen] = 0;
+		cinfo.count++;
+		cinfo.rwLen = 0;
+	}
+	else if (cinfo.rwLen > MsgLen)
+	{
+		killClient(cinfo);
+		return false;
+	}
+	//printf("recv success , cfd = %d,count = %d \n", cinfo.cfd,cinfo.count);
+	return true;
 }
 
-void createNewConnect()
+
+void dealFork(const int cfd)
 {
-    socklen_t len_client_addr = sizeof(client_addr);
-    int i = ctr_client++;
-    if((connect_fd[i] = accept(server_fd, (struct sockaddr*)&client_addr, &len_client_addr)) == -1)
-        myExit();
-    
-    max_fd = max_fd > connect_fd[i] ? max_fd : connect_fd[i];
+	int pid = fork();
+	if (pid < 0)
+	{
+		cerr << "fork failed !\n";
+		return;
+	}
+	if (pid > 0)
+		return;
 
-    printClientInfo(i);
+	prctl(PR_SET_PDEATHSIG,SIGKILL);
 
-    setNonBlock(&connect_fd[i], 1);
+	cout << "233"<<endl ;
+	ClientInfo cinfo;
+	cinfo.cfd = cfd;
+	cinfo.count = 0;
+	cinfo.flag = ALIVE;
+	cinfo.rwLen = 0;
+	memset(&(cinfo.msg), 0, sizeof(cinfo.msg));
 
-    flag_client[i] = true;
+	if (flag_block)
+	{
+		while (cinfo.flag == ALIVE)
+		{
+			if(cinfo.count%2==0)
+			{
+				if (sSend(cinfo) == false)
+					return;
+			}
+			if(cinfo.count%2)
+			{
+				if (sRecv(cinfo) == false)
+					return;
+			}
+				
+		}
+	}
+	else
+	{
+		cout <<"unblock !\n";
+		FD_ZERO(&read_fds);
+		FD_SET(cfd, &read_fds);
+		write_fds = read_fds;
+		fd_set rfd_cpy, wfd_cpy;
+		timeval wait_time;
+		while(cinfo.flag == ALIVE)
+		{
+			
+			setTime(wait_time,1);
+			rfd_cpy = read_fds;
+			wfd_cpy = write_fds;
+			switch (select(cfd + 1, &rfd_cpy, &wfd_cpy, NULL, &wait_time))
+			{
+			case -1:
+				cerr<<"select error !\n";
+				break;
+			case 0 :
+				//cerr<<"fork select timeout !\n";
+				break;
+			default :
 
+				if(FD_ISSET(cfd,&rfd_cpy))
+				{
+					if(testConnect(cfd)==false)
+					{
+						killClient(cinfo);
+						break;
+					}
+					if(cinfo.count%2)
+						sRecv(cinfo);
+				}
+				if(cinfo.count%2==0&&FD_ISSET(cfd,&wfd_cpy))
+					sSend(cinfo);
+				break;
+			}
+		}
+	}
 
-    clientInfo[i].cfd = connect_fd[i];
-    clientInfo[i].count = 0;
-    memset(clientInfo.msg, 0 ,sizeof(ClinetMSg));
-    clientInfo[i].flag = true;
+	cout << "fork ok !\n";
+	exit(0);
+	return;
 }
-bool sSend(int & myCount , int cfd)
+
+
+
+int main(int argc, char *argv[])
 {
-    int count = myCount /2;
-    int MsgLen = strlen(orderMsg[count]);
+	parseCMD(argc, argv, false);
 
-    bool sndFlag ;
-    if(count==GETSTR||count==GETIME)
-        MsgLen +=1 ;
-
-    if(count==GETSTR){
-        char strMsg [10]= "str";
-        int randNum = 32768 +  ((rand()+1e-6)/RAND_MAX*67231);
-        sprintf(strMsg+strlen(strMsg),"%d",randNum);
-        sndFlag = mySndMsg(cfd, strMsg,strlen(strMsg)+1);
-    }
-    else
-        sndFlag = mySndMsg(cfd,orderMsg[count],MsgLen);
-    
-    if(sndFlag)
-        myCount++;
-    return sndFlag;
-}
-
-bool sRecv(int & myCount , int cfd, struct ClientMsg * cMsg )
-{
-    int count = myCount / 2;
-    int readNum  ;
-    switch(count){
-    case GETSTUNO :
-        readNum = recv(cfd,&(cMsg->StuNo),sizeof(cMsg->StuNo),0);
-        break;
-    case GETPID :
-        readNum = recv(cfd,&(cMsg->clientPid),sizeof(cMsg->clientPid),0);
-        break;
-    case GETIME :
-        readNum  = recv(cfd, (cMsg->clientTime),sizeof(cMsg->clientTime),0);
-        if(readNum>0)
-            cMsg->clientTime[readNum]=0;
-        break;
-    case GETSTR :
-        readNum = recv(cfd,(cMsg->randomMsg),cMsg->randomMsgLen,0);
-        if(readNum==cMsg->randomMsgLen)
-            cMsg->randomMsg[cMsg->randomMsgLen]=0;
-        else
-            readNum = -1;
-        break;
-    }
-    if(readNum<=0)
-        return false;
-
-    myCount ++ ;
-    return true;
-}
-
-int main(int argc,char* argv[])
-{
-    parseCMD(argc, argv , false);
+	printf("flag_block =%d , flag_fork=%d\n",flag_block,flag_fork);
 
 
-    if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-        myExit();
+	serverInit();
 
-    setReusePort();
 
-    if(!flag_block)
-        setNonBlock(&server_fd, 0);
+	fd_set rfd_cpy, wfd_cpy;
+	timeval wait_time;
 
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	char msgTest [5];
 
-    if(bind(server_fd,(struct sockaddr *)&server_addr,sizeof(server_addr)) == -1)
-        myExit();
+	signal(SIGCHLD, SIG_IGN);
+	if (flag_fork)
+	{
+		while (1)
+		{
+			setTime(wait_time, 1);
+			rfd_cpy = read_fds;
+			
+			switch (select(server_fd + 1, &rfd_cpy, NULL, NULL, &wait_time))
+			{
+			case -1:
+				cerr<<"select error !\n";
+				break;
+			case 0:
+				break;
+			default:
+				cout<<"select success !\n";
+				if (FD_ISSET(server_fd, &rfd_cpy))
+				{
+					int cfd = accept(server_fd, NULL, NULL);
+					cout <<"accept ok !\n";
+					if(!flag_block)
+						setNonBlock(cfd);
+					if (cfd < 0)
+					{
+						cerr << "accept failed !\n";
+						break;
+					}
+					else
+						dealFork(cfd);
+					cout<<"connect done \n";
+				}
+				break;
+			}
+		}
+	}
+	else
+	{
+		cout<<"unfork unblock !\n";
+		clientinfos = new ClientInfo[SERVER_MAX_CONNECT];
+		while (1)
+		{
+			setTime(wait_time, 1);
+			rfd_cpy = read_fds;
+			wfd_cpy = write_fds;
 
-    printServerInfo();
+			switch (select(max_fd + 1, &rfd_cpy, &wfd_cpy, NULL, &wait_time))
+			{
+			case -1:
+				if (errno != EINTR)
+					myExit();
+				break;
+			case 0:
+				//cerr<<"select time out !\n";
+				break;
+			default:
+				int newmax = 0;
+				if (FD_ISSET(server_fd, &rfd_cpy))
+				{
+					while(createNewConnect()==true)
+						;
+				}
+				for (int i = 0; i < max_clientinfo + 1; i++)
+				{
+					if (clientinfos[i].flag != ALIVE)
+						continue;
+					newmax = i;
+					if ( FD_ISSET(clientinfos[i].cfd, &rfd_cpy))
+					{
+						if(testConnect(clientinfos[i].cfd)==false)
+						{
+							killClient(clientinfos[i]);
+							continue;
+						}
+						//cout<<"max_fd"<<max_fd<< "select cfd ="<<clientinfos[i].cfd <<endl ;
+						if(clientinfos[i].count % 2)
+							sRecv(clientinfos[i]);
+					}
+					if (clientinfos[i].count % 2 == 0&&FD_ISSET(clientinfos[i].cfd, &wfd_cpy) )
+					{
+						sSend(clientinfos[i]);
+					}
+				}
+				max_clientinfo = newmax;
+				break;
+			}
+		}
+		delete clientinfos;
+	}
 
-    if(listen(server_fd, max_num) == -1)
-        myExit();
-    
-    cout << "server is listening" <<endl;
-    
-    init();
-
-    if(flag_fork){
-        pid_t pid = fork();
-        if (pid < 0)
-            myExit();
-        else if(pid > 0){
-            cout << "recieve new connection require!" <<endl;
-
-        }
-        else{
-            createNewConnect();
-
-            void *p = NULL;
-            if(flag_block)
-                p = &wait_time;
-
-            while(true){
-                FD_ZERO(&read_fds);
-                FD_SET(server_fd, &read_fds);
-                select(max_fd + 1, &read_fds, &write_fds, p){
-                    //send() write()
-                }
-            }
-        }
-    }
-    else{
-        signal(SIGALRM, writeWait);
-        alarm(WRITE_TIME);
-        while(true){
-            FD_ZERO(&read_fds);
-            FD_SET(server_fd, &read_fds);
-            for(int i=0 ; i<ctr_client ; i++){
-                if(!flag_client[i])
-                    continue;
-                FD_SET(connect_fd[i], &read_fds);
-            }
-
-            void *p = NULL;
-            if(flag_block)
-                p = &wait_time;
-
-            switch(select(max_fd + 1, &read_fds, &write_fds, NULL, p)){
-                case -1:    // alarm ring to arouse the -1 return of select function
-                    if(errno != EINTR)
-                        myExit();
-
-                case 0: break;
-                default:
-                    if(FD_ISSET(server_fd, &read_fds))
-                        createNewConnect();
-                    for(int i=0 ; i < ctr_client; i++){
-                        if(FD_ISSET(clientInfo[i].cfd, &read_fds) && clinetInfo[i].count % 2){
-                            sRecv(clinetInfo[i].count, clientInfo[i].cfd, &clientInfo[i].msg);
-                            FD_SET(clientInfo[i].cfd, &write_fds);  // TODO
-                        }
-                    }
-
-                    for(int i=0 ; i < ctr_client; i++){
-                        if(FD_ISSET(clientInfo[i].cfd, &write_fds) && clinetInfo[i].count % 2 == 0){
-                            sSend((clinetInfo[i].count, clientInfo[i].cfd);
-                        }
-                    }
-
-            }
-        }
-    }
-
-    close(server_fd);
-    return 0;
+	return 0;
 }

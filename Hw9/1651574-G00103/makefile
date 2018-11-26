@@ -1,17 +1,13 @@
-SRC = server client
-OBJ = $(addsuffix .o, $(SRC))
-TARGET = server client
+TARGET = server client 
 
-main: $(TARGET)
+main: $(TARGET) 
 
-server: server.o
-	g++ -o $@ $^
+server: server.cpp myutil.cpp
+	g++ server.cpp myutil.cpp -o server
 
-client: client.o
-	g++ -o $@ $^
+client : client.cpp myutil.cpp
+	g++ client.cpp myutil.cpp -o client
 
-
-.PHONY: clean
-
-clean:
-	$(RM) $(TARGET) $(OBJ)
+clean :
+	rm -f $(TARGET) *.o *.txt
+	rm -rf clientout serverout
