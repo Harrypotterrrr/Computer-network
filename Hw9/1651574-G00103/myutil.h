@@ -64,6 +64,8 @@ struct ClientInfo{
 };
 
 
+void create_daemon();
+
 void myExit();
 
 void setReusePort(int fd);

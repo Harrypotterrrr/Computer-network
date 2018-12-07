@@ -14,6 +14,29 @@ const char *orderMsg[]={
 	"end"
 };
 
+void create_daemon()
+{
+	pid_t pid = fork();
+	if(pid==-1)
+		exit(-1);
+	if(pid>0)
+		exit(0);
+
+	if(setsid()==-1)
+		exit(-1);
+	chdir("./");
+	umask(0);
+	pid = fork();
+	if(pid ==-1)
+		exit(-1);
+	if(pid>0)
+		exit(0);
+
+	signal(SIGCHLD, SIG_IGN); 
+	
+	return ;
+}
+
 void myExit()
 {
 	cerr << strerror(errno) << endl;
@@ -62,7 +85,7 @@ bool writeFile(const ClientInfo & cinfo, bool isServer)
         strcpy(filepath, "./clientout");
         if(mkdir(filepath, S_IRWXU | S_IRWXG | S_IRWXO) == 0){
             cerr << "make directory failed!" <<endl;
-            exit(-1);
+            //exit(-1);
         }
         strcat(filepath, "/");
         strcat(filepath, filename);

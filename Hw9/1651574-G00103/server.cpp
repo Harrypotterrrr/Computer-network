@@ -9,7 +9,11 @@ int max_clientinfo;
 ClientInfo * clientinfos ; 
 fd_set read_fds, write_fds;
 
+int totalConnectCfd = 0;
+
 using namespace std;
+
+void killClient(ClientInfo &);
 
 void serverInit()
 {
@@ -60,9 +64,25 @@ bool  createNewConnect()
 	}
 
 	int cfd = accept(server_fd, (struct sockaddr *)&client_addr, &len_client_addr);
-	if (cfd < 0)
+	if (cfd < 0 || cfd >1023)
 	{
-		cerr << "accept failed !\n";
+		if(cfd>1023)
+		{
+			close (cfd);
+			cerr<<"beyond ablility !\n";
+			for(int i = 0;i<10;i++)
+			{
+				int j = rand()%SERVER_MAX_CONNECT;
+				cout <<"j="<<j<<endl;
+				if(clientinfos[j].flag == ALIVE)
+				{
+					cout <<"kill ok !\n";
+					killClient(clientinfos[j]);
+				}
+			}
+		}
+		
+		//cerr << "accept failed !\n";
 		return false ;
 	}
 
@@ -72,10 +92,8 @@ bool  createNewConnect()
 	clientinfos[i].rwLen = 0;
 	memset(&(clientinfos[i].msg), 0, sizeof(clientinfos[i].msg));
 
-	if (1)
-	{
-		cout << "connect ok , i= " << i << endl;
-	}
+	totalConnectCfd++;
+	cout <<"totalConnectCfd "<<totalConnectCfd<<endl;
 
 	FD_SET(cfd, &read_fds);
 	FD_SET(cfd, &write_fds);
@@ -93,7 +111,8 @@ bool  createNewConnect()
 
 void killClient(ClientInfo &cinfo)
 {
-	if(cinfo.count>8)
+
+	if(cinfo.flag == ALIVE &&cinfo.count>8)
 	{
 		if(writeFile(cinfo, true)==false)
 			return ;
@@ -103,6 +122,8 @@ void killClient(ClientInfo &cinfo)
 	close(cinfo.cfd);
 	FD_CLR(cinfo.cfd, &read_fds);
 	FD_CLR(cinfo.cfd, &write_fds);
+	totalConnectCfd--;
+	cout <<"totalConnectCfd "<<totalConnectCfd<<endl;
 	/*
 	if (cinfo.msg.randomMsgLen && cinfo.msg.randomMsg)
 	{
@@ -151,7 +172,7 @@ bool sSend(ClientInfo &cinfo)
 
 	int sndNum = send(cinfo.cfd, sndMsg + cinfo.rwLen, MsgLen - cinfo.rwLen, 0);
 
-	if (sndNum < 0)
+	if (sndNum <= 0)
 	{
 		// TODO
 		cerr << "cllient_cfd :" << cinfo.cfd << "snd error !\n";
@@ -165,12 +186,16 @@ bool sSend(ClientInfo &cinfo)
 	{
 		cinfo.count++;
 		cinfo.rwLen = 0;
+		if(cinfo.count>8)
+			killClient(cinfo);
 	}
 	else if (cinfo.rwLen >MsgLen)
 	{
 		killClient(cinfo);
 		return false ;
 	}
+
+
 
 	//printf("send success , cfd = %d,count = %d \n", cinfo.cfd,cinfo.count);
 	return true;
@@ -181,8 +206,8 @@ bool sRecv(ClientInfo &cinfo)
 	
 	if (cinfo.count > 8)
 	{
-		cout << "client " << cinfo.cfd << "ok !\n";
-		cinfo.flag = DONE ;
+		//cout << "client " << cinfo.cfd << "ok !\n";
+		//cinfo.flag = DONE ;
 		killClient(cinfo);
 		return true ;
 	}
@@ -214,7 +239,7 @@ bool sRecv(ClientInfo &cinfo)
 	}
 	if (readNum <= 0)
 	{ // TODO
-		cerr << "cllient_cfd :" << cinfo.cfd << "recv error !\n";
+		cerr << "cllient_cfd :" << cinfo.cfd << "recv error !"<<cinfo.count<<endl;
 		killClient(cinfo);
 		return false;
 	}
@@ -246,15 +271,17 @@ void dealFork(const int cfd)
 	int pid = fork();
 	if (pid < 0)
 	{
+		close(cfd);
 		cerr << "fork failed !\n";
 		return;
 	}
-	if (pid > 0)
+	if (pid > 0){
+		close(cfd);
 		return;
+	}
 
 	prctl(PR_SET_PDEATHSIG,SIGKILL);
 
-	cout << "233"<<endl ;
 	ClientInfo cinfo;
 	cinfo.cfd = cfd;
 	cinfo.count = 0;
@@ -268,20 +295,22 @@ void dealFork(const int cfd)
 		{
 			if(cinfo.count%2==0)
 			{
-				if (sSend(cinfo) == false)
-					return;
+				sSend(cinfo) ;
+				//if (sSend(cinfo) == false)
+				//	return;
 			}
 			if(cinfo.count%2)
 			{
-				if (sRecv(cinfo) == false)
-					return;
+				sRecv(cinfo);
+				//if (sRecv(cinfo) == false)
+				//	return;
 			}
 				
 		}
 	}
 	else
 	{
-		cout <<"unblock !\n";
+		//cout <<"unblock !\n";
 		FD_ZERO(&read_fds);
 		FD_SET(cfd, &read_fds);
 		write_fds = read_fds;
@@ -307,6 +336,7 @@ void dealFork(const int cfd)
 				{
 					if(testConnect(cfd)==false)
 					{
+						//cout <<"dis connect !\n";
 						killClient(cinfo);
 						break;
 					}
@@ -320,7 +350,7 @@ void dealFork(const int cfd)
 		}
 	}
 
-	cout << "fork ok !\n";
+	//cout << "fork ok !\n";
 	exit(0);
 	return;
 }
@@ -329,8 +359,11 @@ void dealFork(const int cfd)
 
 int main(int argc, char *argv[])
 {
+	srand(unsigned(time(0)));
+	create_daemon();
 	parseCMD(argc, argv, false);
 
+	signal(SIGPIPE,SIG_IGN);
 	printf("flag_block =%d , flag_fork=%d\n",flag_block,flag_fork);
 
 
@@ -353,25 +386,25 @@ int main(int argc, char *argv[])
 			switch (select(server_fd + 1, &rfd_cpy, NULL, NULL, &wait_time))
 			{
 			case -1:
-				cerr<<"select error !\n";
+				cerr<<"select error ! "<<strerror(errno)<<"max ="<<max_fd<<endl;
 				break;
 			case 0:
 				break;
 			default:
-				cout<<"select success !\n";
+				//cout<<"select success !\n";
 				if (FD_ISSET(server_fd, &rfd_cpy))
 				{
 					int cfd = accept(server_fd, NULL, NULL);
-					cout <<"accept ok !\n";
-					if(!flag_block)
-						setNonBlock(cfd);
 					if (cfd < 0)
 					{
 						cerr << "accept failed !\n";
 						break;
 					}
-					else
-						dealFork(cfd);
+					//cout <<"accept ok !\n";
+					if(!flag_block)
+						setNonBlock(cfd);
+					
+					dealFork(cfd);
 					cout<<"connect done \n";
 				}
 				break;
@@ -381,38 +414,47 @@ int main(int argc, char *argv[])
 	else
 	{
 		cout<<"unfork unblock !\n";
-		clientinfos = new ClientInfo[SERVER_MAX_CONNECT];
+		clientinfos = new (nothrow)ClientInfo[SERVER_MAX_CONNECT+10];
+		if(clientinfos == NULL){
+			cerr <<"new clientinfos failed !\n";
+			exit(0);
+		}
 		while (1)
 		{
 			setTime(wait_time, 1);
 			rfd_cpy = read_fds;
 			wfd_cpy = write_fds;
 
-			switch (select(max_fd + 1, &rfd_cpy, &wfd_cpy, NULL, &wait_time))
+			//switch (select(max_fd + 1, &rfd_cpy, &wfd_cpy, NULL, &wait_time))
+			switch (select(1024, &rfd_cpy, &wfd_cpy, NULL, &wait_time))
 			{
 			case -1:
-				if (errno != EINTR)
-					myExit();
+				cerr<<"select error ! "<<strerror(errno)<<"max ="<<max_fd<<endl;
+				sleep(1);
+				//if (errno != EINTR)
+				//	myExit();
 				break;
 			case 0:
 				//cerr<<"select time out !\n";
 				break;
 			default:
-				int newmax = 0;
+				//cout <<"max_clientinfo = "<<max_clientinfo<<endl;
+				//int newmax = 0;
 				if (FD_ISSET(server_fd, &rfd_cpy))
 				{
 					while(createNewConnect()==true)
 						;
 				}
-				for (int i = 0; i < max_clientinfo + 1; i++)
+				for (int i = 0; i < SERVER_MAX_CONNECT; i++)
 				{
 					if (clientinfos[i].flag != ALIVE)
 						continue;
-					newmax = i;
+					//newmax = i;
 					if ( FD_ISSET(clientinfos[i].cfd, &rfd_cpy))
 					{
 						if(testConnect(clientinfos[i].cfd)==false)
 						{
+							cout <<"connect duan le ! \n";
 							killClient(clientinfos[i]);
 							continue;
 						}
@@ -425,7 +467,7 @@ int main(int argc, char *argv[])
 						sSend(clientinfos[i]);
 					}
 				}
-				max_clientinfo = newmax;
+				//max_clientinfo = newmax;
 				break;
 			}
 		}
