@@ -16,6 +16,8 @@ pid_t nt_pid; // 网络层
 pid_t dl_pid; // 数据链路层
 pid_t ps_pid; // 物理层
 
+queue<event_type> eventQueue ; 
+
 void getTestPath(int k, char *path)
 {
 	char tmp[10];
@@ -29,6 +31,7 @@ void getTestPath(int k, char *path)
 
 void Init()
 {
+	eventQueue = queue<event_type>();
 	unlink (FIFO_TO_NETWORK);
 	unlink (FIFO_TO_PHYSICAL);
 	unlink (FIFO_PH_TO_DT);
@@ -80,7 +83,7 @@ Status datalink_from_network(Packet& buffer, int k)
     getTestPath(k, path);
 
 	int fd;
-	fd=open(path,O_RDONLY,0666);//打开共享文件
+	fd=open(path,O_RDONLY,0666); // 打开共享文件
 	if(fd<0) {
         cerr << "open" <<path << "fail!" <<endl;
 		return FALSE;
@@ -194,12 +197,12 @@ Status physical_to_datalink(Frame & r )
 
 	//int fd=open(FIFO_PH_TO_DT,O_WRONLY);
 	int fd = fifo_ptod;
-	cout <<1233333<<endl;
+	//cout <<1233333<<endl;
 	if(fd<0) {
 		cerr << "open" << FIFO_PH_TO_DT << "fail!" << endl;
 		return FALSE;
 	}
-	cout <<233333<<endl;
+	//cout <<233333<<endl;
 	if((write(fd,& r ,FRAMESIZE))<0) {
         cerr << "Write" << FIFO_PH_TO_DT << "fail!" <<endl;
 		return FALSE;
@@ -230,6 +233,7 @@ void sig_func(int sig)
 	switch(sig)
 	{
 
+		//  控制网络层到链路层的数据
 		case SIG_NETWORK_TO_DATALK:
 			nNet_to_dl++;
 			break;
@@ -238,9 +242,34 @@ void sig_func(int sig)
 			break;
 
 		case SIG_PL_CONNECT:
-
 			cout <<"conn ok!\n";
 			PL_Connect=true;
+			break;
+
+		case SIG_CHSUM_ERR:
+			eventQueue.push(chsum_err);
+			break ;
+		
+		case SIG_FRAME_ARRIVAL :
+			eventQueue.push(frame_arrival);
+			break ;
+		
+		case SIGALRM:
+			eventQueue.push(timeout);
+			break ;
+
+		case SIG_ENABLE_NETWORK_LAYER:
+
+			break;
+		
+		case SIG_DISABEL_NETWORK_LAYER:
+
+			break ;
+
+		case SIG_DATALK_TO_PHYSIC:
+			nDl_to_phy ++ ;
+			cout <<"now nDl_to_phy "<<nDl_to_phy<<endl;
+			break ;
 
 		default :
 			break ;
@@ -255,14 +284,14 @@ void sig_catch()
 	signal(SIG_DATALK_FROM_NETWORK,sig_func);
 /* 	signal(SIG_DATALK_TO_NETWORK,sig_func);
 	signal(SIG_DATALK_FROM_PHYSIC,sig_func);
-	signal(SIG_DATALK_TO_PHYSIC,sig_func);
+	
 	signal(SIG_PHYSIC_FROM_DATALK,sig_func);
 	signal(SIG_PHYSIC_TO_DATALK,sig_func); */
 
 	signal(SIG_DONE,sig_func);
 	signal(SIG_PL_CONNECT,sig_func);
 
-
+	signal(SIG_DATALK_TO_PHYSIC,sig_func);
 	signal(SIG_CHSUM_ERR,sig_func); 
 	signal(SIG_FRAME_ARRIVAL,sig_func);
 	signal(SIG_NETWORK_LAYER_READY,sig_func);
@@ -424,7 +453,36 @@ int getLayerPid(int & net , int & dt , int & ps ,const char * filename)
 	 }
  }
 
- void wait_for_event( int &event)
+ void wait_for_event( event_type &myevent)
  {
-	 
+	 while(eventQueue.empty())
+	 	sleep(1);
+	
+	myevent = eventQueue.front();
+	eventQueue.pop();
+	return ;
  }
+
+ int frameSize( const Frame & s )
+ {
+	 if(s.kind==data)
+	 	return 1036;
+	else 
+		return 12;
+ }
+
+ void setNonBlock(int fd)
+{
+	int flag;
+	if ((flag = fcntl(fd, F_GETFL, 0)) == -1)
+		myExit();
+	if (fcntl(fd, F_SETFL, flag | O_NONBLOCK) == -1)
+		myExit();
+}
+
+void setTime(timeval &timeout, int sec, int usec )
+{
+	timeout.tv_sec = sec;
+	timeout.tv_usec = usec;
+	return;
+}

@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/prctl.h>//修改进程名
+#include <queue>
 
 using namespace std; 
 
@@ -43,6 +44,7 @@ using namespace std;
 #define SIG_NETWORK_LAYER_READY 37
 #define SIG_ENABLE_NETWORK_LAYER 38
 #define SIG_DISABEL_NETWORK_LAYER 39
+
 #define SIG_DTLINK_LAYER_READY 40 
 
 #define SIG_PL_CONNECT 41
@@ -53,6 +55,7 @@ using namespace std;
 #define SIG_NETWORK_TO_DATALK  46
 
 #define SIG_DATALK_FROM_NETWORK 47
+#define SIG_DATALK_TO_PHYSIC  50
 /* #define SIG_DATALK_TO_NETWORK  48
 #define SIG_DATALK_FROM_PHYSIC  49
 #define SIG_DATALK_TO_PHYSIC  50
@@ -73,7 +76,7 @@ struct Packet
 
 struct Frame
 {
-	frame_kind kind;	
+	int kind; 
 	seq_nr seq;
 	seq_nr ack;
 	Packet info;
@@ -95,6 +98,7 @@ extern pid_t nt_pid; // 网络层
 extern pid_t dl_pid; // 数据链路层
 extern pid_t ps_pid; // 物理层
 
+extern queue<event_type> eventQueue ; 
 
 Status datalink_from_network(Packet& buffer, int k);
 
@@ -143,3 +147,13 @@ void wait_for_event(event_type* event);
 
 //在 进入数据传递前需要调用这个函数，将所有层的fifo建立
 void connectFifo();
+
+// 
+void wait_for_event( event_type &myevent);
+
+// 获取数据帧的长度
+int frameSize( const Frame & s ) ;
+
+void setNonBlock(int fd);
+
+void setTime(timeval &timeout, int sec, int usec );
