@@ -73,7 +73,7 @@ bool writeFile(const ClientInfo & cinfo, bool isServer)
 	char filename [40], filepath[50];
 	sprintf(filename,"%d.%d.pid.txt",cinfo.msg.StuNo,cinfo.msg.clientPid);
     if(isServer){
-        strcpy(filepath, "./serverout");
+        strcpy(filepath, "./txt");
         if(mkdir(filepath, S_IRWXU | S_IRWXG | S_IRWXO) == 0){
             cerr << "make directory failed!" <<endl;
             // exit(-1);
@@ -82,7 +82,7 @@ bool writeFile(const ClientInfo & cinfo, bool isServer)
         strcat(filepath, filename);
     }
     else{
-        strcpy(filepath, "./clientout");
+        strcpy(filepath, "./txt");
         if(mkdir(filepath, S_IRWXU | S_IRWXG | S_IRWXO) == 0){
             cerr << "make directory failed!" <<endl;
             //exit(-1);
