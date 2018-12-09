@@ -1,7 +1,7 @@
 #include "../common/common.h"
 
 
-#define transDataName "send2_data"
+#define transDataName "send3_data"
 const char *pidFileName = "send2pid";
 
 
@@ -65,6 +65,8 @@ void send2_network()
 
 		
 	}
+
+	cout <<"------------read file finish !-------------------\n"<<endl;
 }
 
 void send2_dtlink()
@@ -81,27 +83,51 @@ void send2_dtlink()
 
 	connectFifo();
 
-	event_type event ;
+
+	event_type event =frame_arrival;
+	int next_frame_to_send = 0;
+
+	timer_t timerid ;
+
+	//  read one
+
+	while (nNet_to_dl == 0)
+		sleep(1);
+	cout << "dt link read ok !\n";
+	nNet_to_dl--;
+	datalink_from_network(s.info, 1);
+	kill(nt_pid, SIG_DATALK_FROM_NETWORK);
+
+	timerid = start_timer();
 	while(true)
 	{
-		while(nNet_to_dl==0)
-			sleep(1);
-		cout <<"dt link read ok !\n";
-		nNet_to_dl-- ;
 
-		datalink_from_network(s.info,1);
 		s.kind = htonl(data);
+		s.seq =  htonl(next_frame_to_send);
 		datalink_to_physical(s);
-		kill(nt_pid,SIG_DATALK_FROM_NETWORK);
+		kill(ps_pid,SIG_DATALK_TO_PHYSIC);
 		cout <<ps_pid<<endl;
 
-		//用到了  SIG_DATALK_TO_PHYSIC信号
-		kill(ps_pid,SIG_DATALK_TO_PHYSIC);
-		cout <<"kill ok !\n";
-
-		cout <<"frame size " <<frameSize (s)<<"!!!!!!!!!!!!"<<endl;
+		set_timer(timerid);
 		wait_for_event(event);
-		datalink_from_physical(s);
+		if(event == frame_arrival)
+		{
+			datalink_from_physical(s);
+			if(ntohl(s.ack) != next_frame_to_send)
+			{
+				cout <<ntohl(s.ack)<<"-------not expect "<<next_frame_to_send<<endl;
+				continue;
+			}
+
+			cout <<"ack ok !\n";
+			next_frame_to_send++;
+			while (nNet_to_dl == 0)
+				sleep(1);
+			nNet_to_dl--;
+			//stop_timer(timerid);
+			datalink_from_network(s.info, 1);
+			kill(nt_pid, SIG_DATALK_FROM_NETWORK);
+		}
 		cout <<"wait ok !\n";
 	}
 	exit(0);
@@ -125,6 +151,7 @@ void send2_physic(int argc , char *argv[])
 	{
 		cerr<<"connect error !\n";
 		cout<<nt_pid<<' '<<dl_pid<<" "<<ps_pid<<endl;
+		kill(getppid(),60);
 		exit(0);
 	}
 	setNonBlock(cfd);
@@ -181,9 +208,30 @@ void send2_physic(int argc , char *argv[])
 				}
 				else
 				{
+					if(randProb(0.01))
+					{
+						kill(dl_pid,SIG_CHSUM_ERR);
+						myLog("chsum error ",s_recv);
+						continue;
+					}
+					if(randProb(0.01))
+					{
+						myLog("ack missed ",s_recv);
+						continue;
+					}
 					cout <<"recv ok ! "<<recvNum<<endl;
-					physical_to_datalink(s_recv);
-					kill(dl_pid , SIG_FRAME_ARRIVAL);
+					//physical_to_datalink(s_recv);
+					if(s_recv.kind == htonl(ack))
+					{
+						physical_to_datalink(s_recv);
+						kill(dl_pid , SIG_FRAME_ARRIVAL);
+					}
+					else //if (s_recv.kind==htonl(nak))
+					{
+						kill(dl_pid,SIG_CHSUM_ERR);
+						cout <<"-----------frame err "<<endl;
+					}
+						
 				}
 			}
 			if(FD_ISSET(cfd,&wset_cpy))

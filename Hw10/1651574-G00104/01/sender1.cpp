@@ -108,7 +108,7 @@ void send1_dtlink()
 void send1_physic(int argc , char *argv[])
 {
 
-	sleep(1);
+	//sleep(1);
 
 	struct sockaddr_in server_addr; 
 	int port =atoi(argv[2]);
@@ -139,10 +139,11 @@ void send1_physic(int argc , char *argv[])
 	connectFifo();
 
 	Frame s ;
+	Frame s_recv ; 
 
 	while(true)
 	{
-		physical_layer_from_datalink(s);
+		physical_from_datalink(s);
 
 		int sndNum = send(cfd,&s , sizeof(s),0);
 		if(sndNum>0)
@@ -153,6 +154,24 @@ void send1_physic(int argc , char *argv[])
 		}
 		else 
 			cerr<<"send failed !\n";
+
+/* 		int recvNum = recv(cfd,&s_recv,sizeof(s_recv),0);
+		if(recvNum <0)
+		{
+			cout <<"recv err"<<endl;
+			exit(0);
+		}
+		else 
+		{
+			if(s_recv.kind==ack)
+				kill(dl_pid,SIG_FRAME_ARRIVAL);
+			else if (s_recv.kind==data)
+				physical_to_datalink(s_recv);
+			else if (s_recv.kind==nak)
+				kill(dl_pid,SIG_CHSUM_ERR);
+		} */
+
+		
 
 
 	}

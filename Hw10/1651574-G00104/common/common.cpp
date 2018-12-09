@@ -31,6 +31,7 @@ void getTestPath(int k, char *path)
 
 void Init()
 {
+	srand(time(0));
 	eventQueue = queue<event_type>();
 	unlink (FIFO_TO_NETWORK);
 	unlink (FIFO_TO_PHYSICAL);
@@ -83,7 +84,7 @@ Status datalink_from_network(Packet& buffer, int k)
     getTestPath(k, path);
 
 	int fd;
-	fd=open(path,O_RDONLY,0666); // 打开共享文件
+	fd=open(path,O_RDONLY,0666);//打开共享文件
 	if(fd<0) {
         cerr << "open" <<path << "fail!" <<endl;
 		return FALSE;
@@ -104,23 +105,6 @@ Status datalink_from_network(Packet& buffer, int k)
 	return OK;
 }
 
-Status datalink_to_physical(Frame &s)
-{
-	//int fd=open(FIFO_TO_PHYSICAL,O_WRONLY);
-	int fd=fifo_dtop;
-
-	if(fd<0) {
-		cerr << "open" << FIFO_TO_PHYSICAL << "fail!" << endl;
-		return FALSE ;
-	}
-	if((write(fd,&s,FRAMESIZE))<0) {
-        cerr << "write" << FIFO_TO_PHYSICAL << "fail!" <<endl;
-		myExit();
-	}
-
-	return OK;
-}
-
 Status datalink_from_physical(Frame &r)
 {
 
@@ -130,13 +114,21 @@ Status datalink_from_physical(Frame &r)
 		cerr << "open" << FIFO_PH_TO_DT << "fail!" << endl;
 		return FALSE ;
 	}
-	if((read(fd,&r,FRAMESIZE))<0) {
+	if((read(fd,&r,FRAMESIZE))<=0) {
         cerr << "Read" << FIFO_PH_TO_DT << "fail!" <<endl;
 		return FALSE;
 	}
+/* 	if((read(fd,&r,12))<=0) {
+        cerr << "Read" << FIFO_PH_TO_DT << "fail!" <<endl;
+		return FALSE;
+	}
+	else if(frameSize(r)>12)
+		read(fd,&r+12,FRAMESIZE-12);
+ */
 
 	return OK;
 }
+
 
 Status datalink_to_network_layer(Packet &buffer)
 {
@@ -154,20 +146,24 @@ Status datalink_to_network_layer(Packet &buffer)
 	return OK;
 }
 
-Status physical_layer_from_datalink(Frame &s)
+Status datalink_to_physical(Frame &s)
 {
+	//int fd=open(FIFO_TO_PHYSICAL,O_WRONLY);
+	int fd=fifo_dtop;
 
-	
-	//int fd=open(FIFO_TO_PHYSICAL,O_RDONLY);
-	int fd = fifo_dtop;
 	if(fd<0) {
 		cerr << "open" << FIFO_TO_PHYSICAL << "fail!" << endl;
-		return FALSE;
+		return FALSE ;
 	}
-	if((read(fd,&s,FRAMESIZE))<0) {
-        cerr << "read" << FIFO_TO_PHYSICAL << "fail!" <<endl;
-		return FALSE;
+	if((write(fd,&s,FRAMESIZE))<0) {
+        cerr << "write" << FIFO_TO_PHYSICAL << "fail!" <<endl;
+		myExit();
 	}
+
+/* 	if((write(fd,&s,frameSize(s)))<0) {
+        cerr << "write" << FIFO_TO_PHYSICAL << "fail!" <<endl;
+		myExit();
+	} */
 
 
 	return OK;
@@ -202,11 +198,14 @@ Status physical_to_datalink(Frame & r )
 		cerr << "open" << FIFO_PH_TO_DT << "fail!" << endl;
 		return FALSE;
 	}
-	//cout <<233333<<endl;
 	if((write(fd,& r ,FRAMESIZE))<0) {
         cerr << "Write" << FIFO_PH_TO_DT << "fail!" <<endl;
 		return FALSE;
 	}
+/* 	if((write(fd,& r ,frameSize(r)))<0) {
+        cerr << "Write" << FIFO_PH_TO_DT << "fail!" <<endl;
+		return FALSE;
+	} */
 
 	return OK;
 }
@@ -222,6 +221,14 @@ Status physical_from_datalink(Frame & r)
         cerr << "Write" << FIFO_TO_PHYSICAL << "fail!" <<endl;
 		return FALSE;
 	}
+/* 	if((read(fd,&r,12))<0) {
+        cerr << "Write" << FIFO_TO_PHYSICAL << "fail!" <<endl;
+		return FALSE;
+	}
+	else if (frameSize(r)>12)
+	{
+		read(fd,&r+12,FRAMESIZE-12);
+	} */
 	return OK;
 }
 
@@ -233,6 +240,9 @@ void sig_func(int sig)
 	switch(sig)
 	{
 
+		case SIGCHLD:
+			exit(0);
+			break ;
 		//  控制网络层到链路层的数据
 		case SIG_NETWORK_TO_DATALK:
 			nNet_to_dl++;
@@ -240,7 +250,13 @@ void sig_func(int sig)
 		case SIG_DATALK_FROM_NETWORK:
 			nNet_to_dl --;
 			break;
-
+		case SIG_DATALK_TO_NETWORK:
+			nDl_to_net++;
+			break;
+		case SIG_NETWORK_FROM_DATALK:
+			nDl_to_net--;
+			break;
+		
 		case SIG_PL_CONNECT:
 			cout <<"conn ok!\n";
 			PL_Connect=true;
@@ -255,6 +271,7 @@ void sig_func(int sig)
 			break ;
 		
 		case SIGALRM:
+			cout <<"-----------time out ------------"<<endl;
 			eventQueue.push(timeout);
 			break ;
 
@@ -268,9 +285,20 @@ void sig_func(int sig)
 
 		case SIG_DATALK_TO_PHYSIC:
 			nDl_to_phy ++ ;
-			cout <<"now nDl_to_phy "<<nDl_to_phy<<endl;
+			break ;
+		case SIG_PHYSIC_FROM_DATALK:
+			nDl_to_phy -- ;
+			break ;
+		case SIG_PHYSIC_TO_DATALK:
+			nPhy_to_dl ++ ;
+			break ;
+		case SIG_DATALK_FROM_PHYSIC:
+			nPhy_to_dl -- ;
 			break ;
 
+		case SIG_DONE:
+			eventQueue.push(done);
+			break ;
 		default :
 			break ;
 	
@@ -279,19 +307,19 @@ void sig_func(int sig)
 
 void sig_catch()
 {
-	//signal(SIG_NETWORK_FROM_DATALK,sig_func);
+	signal(SIGCHLD,sig_func);
+	signal(SIG_NETWORK_FROM_DATALK,sig_func);
 	signal(SIG_NETWORK_TO_DATALK,sig_func);
 	signal(SIG_DATALK_FROM_NETWORK,sig_func);
-/* 	signal(SIG_DATALK_TO_NETWORK,sig_func);
+	signal(SIG_DATALK_TO_NETWORK,sig_func);
 	signal(SIG_DATALK_FROM_PHYSIC,sig_func);
-	
 	signal(SIG_PHYSIC_FROM_DATALK,sig_func);
-	signal(SIG_PHYSIC_TO_DATALK,sig_func); */
+	signal(SIG_PHYSIC_TO_DATALK,sig_func);
+	signal(SIG_DATALK_TO_PHYSIC,sig_func);
 
 	signal(SIG_DONE,sig_func);
 	signal(SIG_PL_CONNECT,sig_func);
 
-	signal(SIG_DATALK_TO_PHYSIC,sig_func);
 	signal(SIG_CHSUM_ERR,sig_func); 
 	signal(SIG_FRAME_ARRIVAL,sig_func);
 	signal(SIG_NETWORK_LAYER_READY,sig_func);
@@ -304,22 +332,14 @@ void sig_catch()
 void enable_network_layer()
 {
 	//获取network层进程的pid号
-    int pid;
-    FILE *fp = popen("ps -e | grep \'_network' | awk \'{print $1}\'","r");
-    char buffer[10] = {0};
-    fgets(buffer, 10, fp);
-    pid=atoi(buffer);
+    int pid = nt_pid ;
 	kill(pid,SIG_ENABLE_NETWORK_LAYER);
 }
 
 void disable_network_layer()
 {
 	//获取network层进程的pid号
-    int pid;
-    FILE *fp = popen("ps -e | grep \'_network' | awk \'{print $1}\'","r");
-    char buffer[10] = {0};
-    fgets(buffer, 10, fp);
-    pid=atoi(buffer);
+    int pid = nt_pid ;
 	kill(pid,SIG_DISABEL_NETWORK_LAYER);
 }
 
@@ -465,10 +485,15 @@ int getLayerPid(int & net , int & dt , int & ps ,const char * filename)
 
  int frameSize( const Frame & s )
  {
-	 if(s.kind==data)
+	 if(s.kind==htonl(data))
 	 	return 1036;
-	else 
+	else if(s.kind==htonl(ack)||s.kind==htonl(nak))
 		return 12;
+	else 
+	{
+		cerr <<"failed !\n";
+		exit(0);
+	}
  }
 
  void setNonBlock(int fd)
@@ -480,9 +505,75 @@ int getLayerPid(int & net , int & dt , int & ps ,const char * filename)
 		myExit();
 }
 
-void setTime(timeval &timeout, int sec, int usec )
+void setTime(timeval &time_out, int sec, int usec )
 {
-	timeout.tv_sec = sec;
-	timeout.tv_usec = usec;
+	time_out.tv_sec = sec;
+	time_out.tv_usec = usec;
 	return;
+}
+
+void myLog(const char *msg , const Frame & r )
+{
+
+	ofstream fout ("log",ios::out|ios::app);
+	fout <<msg<< " seq ="<<hex<<r.seq<<" ack = "<<dec<<r.ack<<endl;
+	fout.close();
+	return ;
+}
+
+// 为真的概率
+bool randProb(double x )
+{
+	double p = rand()/ (RAND_MAX+1e-6);
+	if(p<x)
+		return true;
+	return false ;
+}
+
+// 睡眠时间
+void mySleep( int s ,int us )
+{
+	timeval time_out = {s,us};
+	select(10,NULL,NULL,NULL,&time_out);
+	return ;
+}
+
+timer_t start_timer()
+{
+    struct sigevent evp;
+    struct itimerspec ts;
+    timer_t timer;
+
+	cout <<"setOk"<<endl;
+
+	evp.sigev_value.sival_ptr = &timer;
+    evp.sigev_notify = SIGEV_SIGNAL;
+    evp.sigev_signo = SIGALRM;
+
+
+	int ret = timer_create(CLOCK_REALTIME, &evp, &timer);
+
+
+
+	return timer ;
+
+}
+
+void set_timer (timer_t timer )
+{
+	struct itimerspec ts;
+	ts.it_interval.tv_sec = 0;
+    ts.it_interval.tv_nsec = 0;
+    ts.it_value.tv_sec = 0;
+    ts.it_value.tv_nsec = 1000*1000*50;
+
+	timer_settime(timer, 0 ,&ts , NULL);
+}
+
+
+
+void stop_timer (timer_t timer )
+{
+	timer_delete (timer);
+
 }

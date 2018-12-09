@@ -51,21 +51,21 @@ using namespace std;
 
 #define SIG_DONE 43
 
-//#define SIG_NETWORK_FROM_DATALK  45
+#define SIG_NETWORK_FROM_DATALK  45
 #define SIG_NETWORK_TO_DATALK  46
 
 #define SIG_DATALK_FROM_NETWORK 47
 #define SIG_DATALK_TO_PHYSIC  50
-/* #define SIG_DATALK_TO_NETWORK  48
+#define SIG_DATALK_TO_NETWORK  48
 #define SIG_DATALK_FROM_PHYSIC  49
 #define SIG_DATALK_TO_PHYSIC  50
 
 #define SIG_PHYSIC_FROM_DATALK  51
-#define SIG_PHYSIC_TO_DATALK  52 */
+#define SIG_PHYSIC_TO_DATALK  52
 
 
 typedef int Status;
-typedef enum {frame_arrival=1,chsum_err,timeout,ack_timeout,network_layer_ready} event_type;
+typedef enum {noevent,frame_arrival,chsum_err,timeout,ack_timeout,network_layer_ready,done} event_type;
 typedef enum {data,ack,nak} frame_kind;
 typedef unsigned int seq_nr; 
 
@@ -76,7 +76,7 @@ struct Packet
 
 struct Frame
 {
-	int kind; 
+	int kind;	
 	seq_nr seq;
 	seq_nr ack;
 	Packet info;
@@ -99,6 +99,8 @@ extern pid_t dl_pid; // 数据链路层
 extern pid_t ps_pid; // 物理层
 
 extern queue<event_type> eventQueue ; 
+
+void sig_func(int sig)  ;
 
 Status datalink_from_network(Packet& buffer, int k);
 
@@ -156,4 +158,19 @@ int frameSize( const Frame & s ) ;
 
 void setNonBlock(int fd);
 
-void setTime(timeval &timeout, int sec, int usec );
+void setTime(timeval &time_out, int sec, int usec );
+
+//写日志   写错误信息和帧信息
+void myLog(const char *msg , const Frame & r );
+
+// 为真的概率
+bool randProb(double x );
+
+// 睡眠时间
+void mySleep( int s ,int us );
+
+timer_t start_timer( );
+
+void stop_timer (timer_t timer );
+
+void set_timer (timer_t timer );

@@ -1,0 +1,737 @@
+<meta charset="utf-8" lang="en"><style class="fallback">body{visibility:hidden;}</style>
+
+**TCP 基础知识综合**
+
+# 乌托邦协议
+
+## 程序结构
+
+由于乌托邦协议不考虑任何出错情况，数据只能单项传输，且不存在损失帧和丢失帧，因此在整体结构中，使用文件读写操作，进行sender端网络层与数据链路层的数据发送、接收，其余均使用有名管道进行数据发送
+
+## 层间的数据收发
+
+不同层的数据交互函数声明:
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+Status datalink_from_network(Packet& buffer, int k);
+
+Status datalink_to_physical(Frame& s);
+
+Status datalink_from_physical(Frame& r);
+
+Status datalink_to_network_layer(Packet& buffer);
+
+Status physical_layer_from_datalink(Frame &r);
+
+Status network_to_datalink(Packet& buffer, int k);
+
+Status network_from_datalink (Packet &buffer );
+
+Status physical_to_datalink(Frame &r );
+
+Status physical_from_datalink(Frame &r);
+~~~~~~~~
+</script>
+
+如上所述，网络层向数据链路层发送数据、数据链路层从网络层接收数据用文件进程数据交互
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+Status datalink_from_network(Packet& buffer, int k)
+{
+    char path[PATHLENGTH];
+    getTestPath(k, path);
+
+	int fd;
+	fd=open(path,O_RDONLY,0666); // 打开共享文件
+	if(fd<0) {
+        cerr << "open" <<path << "fail!" <<endl;
+		return FALSE;
+	}
+	
+	// 给文件上读入锁 
+	lock_set(fd, F_RDLCK); 
+
+    if (read(fd,buffer.data, BUFSIZE) < 0) {
+        cerr << "read" <<path << "fail!" <<endl;
+		lock_set(fd, F_UNLCK); 
+		return FALSE;
+	}   
+
+	lock_set(fd, F_UNLCK);    
+	close(fd);  
+    //unlink(path);
+	return OK;
+}
+~~~~~~~~
+</script>
+
+其余物理层、数据链路层以及数据链路层向网络层发送数据，网络层从数据链路层接收数据均使用有名通道
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+Status datalink_from_physical(Frame &r)
+{
+
+	//int fd=open(FIFO_PH_TO_DT,O_RDONLY);
+	if(fd<0) {
+		cerr << "open" << FIFO_PH_TO_DT << "fail!" << endl;
+		return FALSE ;
+	}
+	if((read(fd,&r,FRAMESIZE))<0) {
+        cerr << "Read" << FIFO_PH_TO_DT << "fail!" <<endl;
+		return FALSE;
+	}
+	return OK;
+}
+~~~~~~~~
+</script>
+
+## 信号设计
+
+对于除乌托邦以外的协议，由于层间数据传输效率不同，收发效率不同，因此需要半双工/双工通道进行回ack等操作，此外包含乌托邦协议，为了保证数据顺利的传送以及包的堆积，设计了信号，其功能为在层间进程间通知
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+#define SIG_CHSUM_ERR	35
+#define SIG_FRAME_ARRIVAL 36
+#define SIG_NETWORK_LAYER_READY 37
+#define SIG_ENABLE_NETWORK_LAYER 38
+#define SIG_DISABEL_NETWORK_LAYER 39
+#define SIG_DTLINK_LAYER_READY 40 
+#define SIG_PL_CONNECT 41
+#define SIG_DONE 43
+// #define SIG_NETWORK_FROM_DATALK  45
+#define SIG_NETWORK_TO_DATALK  46
+#define SIG_DATALK_FROM_NETWORK 47
+#define SIG_DATALK_TO_PHYSIC  50
+~~~~~~~~
+</script>
+
+使用sig_catch函数钩子在main父进程中捕捉全部信号
+
+信号函数处理如下
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+void sig_func(int sig)  
+{  
+	cout <<"sig ="<<sig<<endl;
+	switch(sig) {
+		case SIG_NETWORK_TO_DATALK:
+			nNet_to_dl++;
+			break;
+		case SIG_DATALK_FROM_NETWORK:
+			nNet_to_dl --;
+			break;
+		case SIG_PL_CONNECT:
+			cout <<"conn ok!\n";
+			PL_Connect=true;
+			break;
+		case SIG_CHSUM_ERR:
+			eventQueue.push(chsum_err);
+			break ;
+		case SIG_FRAME_ARRIVAL :
+			eventQueue.push(frame_arrival);
+			break ;
+		case SIGALRM:
+			eventQueue.push(timeout);
+			break ;
+		case SIG_DATALK_TO_PHYSIC:
+			nDl_to_phy ++ ;
+			cout <<"now nDl_to_phy "<<nDl_to_phy<<endl;
+			break ;
+		default :
+			break ;
+	}
+}  
+~~~~~~~~
+</script>
+
+其中几个关键的变量含义如下:
+
+- nNet_to_dl: 表示网络层向数据链路层发送的帧个数，上限为buffSize
+
+    - 对于网络层: 当nNet_to_dl达到buffSize，则sleep不再向文件写数据
+
+    - 对于数据链路层: 当nNet_to_dl为0，则sleep不再从文件读数据
+
+- nDl_to_phy: 表示数据链路层向物理层发送的帧个数，目前无上限
+
+    - 对于网络层: 每当数据链路层发帧给物理层时，nDl_to_phy++，表示有数据帧可以物理层可以读取
+
+    - 对于数据链路层: 每当从fifo有名管道中读取一帧时，nDl_to_phy--，如果为0，则sleep等待
+
+- eventQueue: 事件队列，避免大量信号接收时，产生冲突
+
+- PL_Connect: true时表示sender,reciever物理层链接成功
+
+## 网络层设计
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+while(PL_Connect==false)
+    sleep(1);
+cout <<"network conn ok !\n";
+getLayerPid(nt_pid,dl_pid,ps_pid,pidFileName);
+cout <<"network read pid ok "<<endl;
+unlink(pidFileName);
+connectFifo();
+ifstream fin ;
+fin.open(transDataName,ios::in|ios::binary);
+if(fin.is_open()==false) {
+    cerr<<"打开文件失败";
+    exit(0);
+}
+cout <<"nums of net "<< nNet_to_dl <<endl ;
+Packet p ;
+bool flag =true; 
+while(true) {
+    while(nNet_to_dl == buffSize)
+        sleep(1);
+    nNet_to_dl ++ ;
+    memset(p.data, 0, sizeof(p));
+    if (flag)
+        flag = fin.read((char *)&p, sizeof(p));
+    network_to_datalink(p,1);
+    kill(dl_pid,SIG_NETWORK_TO_DATALK);
+    cout <<"send1 net to dt link ok !\n";
+    if(flag == 0) {
+        kill(dl_pid,SIG_DONE);
+        cout<<"send1 network layer done \n";
+        fin.close();
+        return ;
+    }
+}
+~~~~~~~~
+</script>
+
+## 数据链路层设计
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+Frame s ;
+Packet buffer ;
+while(PL_Connect==false)  
+    sleep(1);
+cout <<"dtlink conn ok !\n";
+getLayerPid(nt_pid,dl_pid,ps_pid,pidFileName);
+cout <<"dtlink getpid ok !\n";
+kill(nt_pid ,SIG_PL_CONNECT);
+connectFifo();
+int count =0;
+while(true)
+{
+    while(nNet_to_dl==0)
+        sleep(1);
+    cout <<"dt link read ok !\n";
+    nNet_to_dl-- ;
+    datalink_from_network(s.info,1);
+    s.kind = data;
+    s.seq = 1 ;  //窗口大小只有一个
+
+    kill(nt_pid,SIG_DATALK_FROM_NETWORK);
+
+    cout <<"ready to write pysical !\n";
+    datalink_to_physical(s);
+    cout <<"write to pysical ok !\n";
+}
+exit(0);
+~~~~~~~~
+</script>
+
+## 物理层设计
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+struct sockaddr_in server_addr; 
+int port =atoi(argv[2]);
+server_addr.sin_addr.s_addr = inet_addr(argv[1]);
+server_addr.sin_port= htons(port);
+server_addr.sin_family=AF_INET;
+int cfd ; 
+if ((cfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    myExit();
+if(connect(cfd,(struct sockaddr *)&server_addr,sizeof(sockaddr))==-1) {
+    cerr<<"connect error !\n";
+    cout<<nt_pid<<' '<<dl_pid<<" "<<ps_pid<<endl;
+    exit(0);
+
+}
+cout<<"cfd = "<<cfd<<endl;
+ps_pid = getpid();
+PL_Connect = true ;
+kill(dl_pid ,SIG_PL_CONNECT);
+connectFifo();
+Frame s ;
+while(true) {
+    physical_layer_from_datalink(s);
+    int sndNum = send(cfd,&s , sizeof(s),0);
+    if(sndNum>0)     {
+        cout<<"send ok ! "<<sndNum<<endl;
+        cout <<endl;
+    }
+    else 
+        cerr<<"send failed !\n";
+}
+cout<<"send1_physic ok !\n";
+exit(0);
+~~~~~~~~
+</script>
+
+
+# 无错信道上的单工停等式协议
+
+发送方以高于接收方能处理到达帧的速度发送帧，导致接收方被淹没。这种情形实际上很容易出现，因此协议是否能够防止它非常重要。然而，仍然假设通信信道不会出错，并且数据流量还是单工的。    
+
+## 网络层
+
+与协议一类似此处不再赘述
+
+## 数据链路层
+
+就像在协议1 中那样，发送方首先从网络层获取一个数据包，用它构造一帧，然后发送出去。但现在，与协议1不同的是，发送方在开始下一轮循环从网络层获取下一个数据包之前必须等待，直到确认帧到来。发送方的数据链路层甚至根本不检查接收到的帧，因
+为对它而言只有一种可能性，即入境帧总是来自接收方的确认。
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+Frame s ;
+Packet buffer ;
+while(PL_Connect==false)  
+    sleep(1);
+
+cout <<"dtlink conn ok !\n";
+getLayerPid(nt_pid,dl_pid,ps_pid,pidFileName);
+cout <<"dtlink getpid ok !\n";
+kill(nt_pid ,SIG_PL_CONNECT);
+
+connectFifo();
+
+int i =0;
+Frame s_ack ;
+s_ack.kind = htonl(ack);
+s_ack.seq = 0xffffffff;
+event_type event ;
+while(true)
+{
+    wait_for_event(event);
+    datalink_from_physical(s);
+    datalink_to_network_layer(s.info);
+
+    s_ack.ack = htonl(i++) ;
+    if(randProb(0.1))
+    {
+        //sleep(1);
+        mySleep(0,50);
+        myLog("ack delay !",s_ack);
+    }
+    datalink_to_physical(s_ack);
+    kill(ps_pid,SIG_DATALK_TO_PHYSIC);
+    cout <<" dl to net ok !\n";
+}
+~~~~~~~~
+</script>
+
+## 物理层
+
+让接收方给发送方提供反馈信息。接收方将数据包传递给网络层之后给发送方返回一个小的哑帧，实际上这一帧的作用是给发送方一个许可，允许它发送下一帧。发送方在发出一帧之后，根据协议要求，它必须等待一段时间直到短哑帧（即确认）到达。
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+sleep(1);
+struct sockaddr_in server_addr = {0};
+int port =atoi(argv[1]);
+server_addr.sin_port = htons(port);
+server_addr.sin_family=AF_INET;
+
+
+ int server_fd ;
+if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    myExit();
+if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
+    myExit();
+if (listen(server_fd, 5)==-1)
+    myExit(); 
+
+int cfd = accept(server_fd, NULL,NULL);
+if(cfd <0)
+{
+    cerr<<"accept error !\n";
+    cout<<nt_pid<<' '<<dl_pid<<" "<<ps_pid<<endl;
+    exit(0);
+}
+cout<<"cfd = "<<cfd<<endl;
+setNonBlock(cfd);
+ps_pid = getpid();
+kill(dl_pid ,SIG_PL_CONNECT);
+connectFifo();
+Frame s ;
+Frame s_recv ; 
+fd_set fdset ;
+FD_ZERO(&fdset);
+FD_SET(cfd,&fdset);
+timeval timeout ;
+fd_set rset_cpy , wset_cpy ;
+FD_ZERO(&rset_cpy);
+FD_ZERO(&wset_cpy);
+setTime(timeout,0,50);
+int dataLen ;
+while(true)
+{
+    rset_cpy = fdset;
+    setTime(timeout,1,10);
+    if(nDl_to_phy)
+    {
+        cout <<"catch kill ！\n";
+        wset_cpy = fdset ;
+    }
+    else
+        FD_ZERO(&wset_cpy);
+    switch(select(cfd+1,&rset_cpy,&wset_cpy,NULL,&timeout))
+    {
+        case -1 :
+            break;
+        case 0:
+            cout <<"time out "<<endl;
+            break;
+            //cout<<"time out "<<endl;
+        default:
+        if(FD_ISSET(cfd,&rset_cpy))
+        {
+            // 先不考虑读不满的情况
+            cout <<"start read !\n";
+            dataLen = sizeof(s_recv);
+            int recvNum = recv(cfd, &s_recv, sizeof(s_recv), 0);
+            if (recvNum < 0)
+            {
+                cout << "recv err" << endl;
+                exit(0);
+            }
+            else
+            {
+                cout<<"read ok "<<recvNum<<endl;
+                physical_to_datalink(s_recv);
+                kill(dl_pid , SIG_FRAME_ARRIVAL);
+            }
+        }
+        if(FD_ISSET(cfd,&wset_cpy))
+        {
+            cout <<"start write !\n";
+            physical_from_datalink(s);
+            //dataLen = frameSize(s);
+            int sndNum = send(cfd, &s, sizeof(s) , 0);
+            if (sndNum > 0){
+                cout<<"snd ok ！"<<sndNum<<endl;
+                nDl_to_phy--;
+            }
+            else
+            {
+                cerr << "send failed !\n";
+                break;
+            }
+        }
+    }
+}
+cout<<"receive2_physic ok !\n";
+exit(0);
+~~~~~~~~
+</script>
+
+# 有错信道上的单工停等式协议
+
+如果一帧在传输过程中被损坏，则接收方硬件在计算校验和时能检测出来。如果一帧被损坏了之后校验和仍然是正确的（这种情况不太可能会出现），那么这个协议（以及所有其他的协议）将会失败（即给网络层递交了一个不正确的数据包）。
+
+## 网络层 
+
+与协议二类似此处不再赘述
+
+## 数据链路层
+
+一位序号co 或者1) 就足以解决问题。在任何一个时刻，接收方期望下一个特定的序号。当包含正确序号的帧到来时，它被接受下来并且被传递给网络层。然后，接收方期待的下一个的序号模2 增1 (即0 变成1, 1 变成0) 。任何一个到达的帧，如果包含了错误序号都将作为重复帧而遭到拒绝。不过，最后一个有效的确认要被重复，以便发送方最终发现已经被接收的那个帧
+
+当发送方和接收方的数据链路层处于等待状态时，两者都用一个变量记录下了有关的值。发送方在next_frame_ to send 中记录了下一个要发送的帧的序号；接收方则在frame_expected 中记录了下一个期望接收的序号。每个协议在进入无限循环之前都有一个简短的初始化阶段。
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+Frame s ;
+Packet buffer ;
+while(PL_Connect==false)  
+    sleep(1);
+
+cout <<"dtlink conn ok !\n";
+getLayerPid(nt_pid,dl_pid,ps_pid,pidFileName);
+cout <<"dtlink getpid ok !\n";
+kill(nt_pid ,SIG_PL_CONNECT);
+
+connectFifo();
+
+int i =0;
+Frame s_ack ;
+s_ack.kind = htonl(ack);
+s_ack.seq = 0xffffffff;
+
+int frame_expected = 0;
+event_type event ;
+while (true)
+{
+    wait_for_event(event);
+    //datalink_from_physical(s);
+    if (event == frame_arrival)
+    {
+        if (randProb(0.1))
+        {
+            mySleep(0, 50);
+            myLog("ack delay !", s_ack);
+        }
+        datalink_from_physical(s);
+
+        cout <<"ack "<<endl;
+        if(ntohl(s.seq)==frame_expected)
+        {
+            cout <<"expect inc------ "<<endl;
+            datalink_to_network_layer(s.info);
+            frame_expected ++ ;
+        }
+        else
+            cout <<ntohl(s.seq)<<"not expect ------"<<frame_expected<<endl;
+        s_ack.kind = htonl(ack);
+        s_ack.ack = htonl(frame_expected-1);
+        datalink_to_physical(s_ack);
+        kill(ps_pid, SIG_DATALK_TO_PHYSIC);
+        cout << " dl to net ok !\n";
+    }
+    else if (event == chsum_err)
+    {
+        cout <<"nak "<<endl;
+        s_ack.ack = htonl(i);
+        s_ack.kind = htonl(nak);
+        datalink_to_physical(s_ack);
+        kill(ps_pid, SIG_DATALK_TO_PHYSIC);
+        myLog("chsum_err ", s_ack);
+        continue ;
+    }
+}
+~~~~~~~~
+</script>
+
+## 物理层
+
+发送方在发出一帧后启动计时器。如果计时器已经在运行，则将它重置，以便等待另一个完整的超时时间间隔。在选择超时值时，应该保证它足够长，确保帧到达接收方，按照最坏的清形被接收方所处理，然后确认帧被返回发送方所需要的全部操作时间。只有当
+这段时间间隔过去之后，发送方才可以假定原先的数据帧或者它的确认帧已经被丢失，于是重发原先的数据帧。如果超时间隔设置得太短，发送方将会发送一些不必要的帧。虽然这些额外的帧不会影响协议的正确性，但是会严重损害协议的性能。
+
+发送方在送出一帧并启动了计时器后，它就等待着相关事情的发生。
+
+此时只有3 种可能的情况:
+
+- 确认帧完好无损地返回: 发送方从它的网络层获取下一个数据包，并把它放入缓冲区覆盖
+掉原来的数据包，同时它还会递增帧的序号
+
+- 确认帧受到损伤: 缓冲区和序号都不作任何改变，以便重传原来的帧
+
+- 计时器超时: 缓冲区和序号都不作任何改变，以便重传原来的帧
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+sleep(1);
+struct sockaddr_in server_addr = {0};
+int port =atoi(argv[1]);
+server_addr.sin_port = htons(port);
+server_addr.sin_family=AF_INET;
+
+
+int server_fd ;
+if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    myExit();
+if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1)
+    myExit();
+if (listen(server_fd, 5)==-1)
+    myExit(); 
+
+int cfd = accept(server_fd, NULL,NULL);
+
+if(cfd <0)
+{
+    cerr<<"accept error !\n";
+    cout<<nt_pid<<' '<<dl_pid<<" "<<ps_pid<<endl;
+    exit(0);
+}
+
+cout<<"cfd = "<<cfd<<endl;
+setNonBlock(cfd);
+ps_pid = getpid();
+
+kill(dl_pid ,SIG_PL_CONNECT);
+connectFifo();
+
+Frame s ;
+Frame s_recv ; 
+
+fd_set fdset ;
+FD_ZERO(&fdset);
+FD_SET(cfd,&fdset);
+timeval timeout ;
+fd_set rset_cpy , wset_cpy ;
+FD_ZERO(&rset_cpy);
+FD_ZERO(&wset_cpy);
+setTime(timeout,0,50);
+
+int dataLen ;
+
+while(true)
+{
+    rset_cpy = fdset;
+    setTime(timeout,1,10);
+    if(nDl_to_phy)
+    {
+        cout <<"catch kill ！\n";
+        wset_cpy = fdset ;
+    }
+    else
+        FD_ZERO(&wset_cpy);
+
+    switch(select(cfd+1,&rset_cpy,&wset_cpy,NULL,&timeout))
+    {
+        case -1 :
+            break;
+        case 0:
+            cout <<"time out "<<endl;
+            break;
+            //cout<<"time out "<<endl;
+        default:
+        if(FD_ISSET(cfd,&rset_cpy))
+        {
+            // 先不考虑读不满的情况
+            cout <<"start read !\n";
+            dataLen = sizeof(s_recv);
+            int recvNum = recv(cfd, &s_recv, sizeof(s_recv), 0);
+            if (recvNum <= 0)
+            {
+                cout << "recv err" << endl;
+                exit(0);
+                continue;
+            }
+            else
+            {
+                if (randProb(0.01))
+                {
+                    kill(dl_pid, SIG_CHSUM_ERR);
+                    myLog("chsum error ", s_recv);
+                    continue;
+                }
+                if (randProb(0.01))
+                {
+                    myLog("data missed ", s_recv);
+                    continue;
+                }
+
+                cout << "recv ok ! " << recvNum << endl;
+                
+                if(s_recv.kind==htonl(data)||s_recv.kind == htonl(ack))
+                {
+                    physical_to_datalink(s_recv);
+                    kill(dl_pid, SIG_FRAME_ARRIVAL);
+                }
+                else if (s_recv.kind == htonl(nak))
+                    kill(dl_pid, SIG_CHSUM_ERR);
+                
+            }		
+            /* 				else
+            {
+                cout<<"read ok "<<recvNum<<endl;
+                physical_to_datalink(s_recv);
+                kill(dl_pid , SIG_FRAME_ARRIVAL);
+            } */
+        }
+        if(FD_ISSET(cfd,&wset_cpy))
+        {
+            cout <<"start write !\n";
+            physical_from_datalink(s);
+            //dataLen = frameSize(s);
+            int sndNum = send(cfd, &s, sizeof(s) , 0);
+            if (sndNum > 0){
+                cout<<"snd ok ！"<<sndNum<<endl;
+                nDl_to_phy--;
+            }
+            else
+            {
+                cerr << "send failed !\n";
+                break;
+            }
+
+        }
+    }
+}
+cout<<"receive2_physic ok !\n";
+exit(0);
+~~~~~~~~
+</script>
+
+
+# 窗口滑动协议
+
+<script type="preformatted">
+~~~~~~~~ C++ linenumbers
+
+~~~~~~~~
+</script>
+
+
+
+<!-Markdeep: --><style class="fallback">body{visibility:hidden}</style><script src="markdeep.min.js"></script>
+<script src="jquery-3.3.1.min.js"></script>
+
+<script type="text/javascript">
+    $(document).ready(function(){setTimeout(function(){$(".image a").removeAttr("href")}, 0)});
+</script>
+
+<style>
+    /* .md h2::before{
+        content: counter(h2, lower-alpha)
+    }
+
+    .md h2.notinc::before{
+        counter-increment: none;
+        content: none
+    }
+
+    div.notinc1 h1::before{
+        counter-increment: none;
+        content: "2*"
+    }
+
+    .md h1.notinc::before{
+        counter-increment: none;
+    } */
+
+    .md .image {
+        width: 80%;
+    }
+
+    .md img {
+        border: 1.3px rgb(0, 0, 0) solid;
+    }
+
+    .md div.imagecaption {
+        text-align: center;
+    }
+
+    /* .level2 .tocnumber {
+        display: none
+    } */
+
+    .md code {
+        background-color: rgba(255, 249, 158, 0.788);
+        color: rgb(145, 52, 40);
+    }
+
+    .md pre code {
+        background: none;
+        /* background-color: rgb(250, 238, 224); */
+        /* border: 1.0px rgb(0, 0, 0) solid; */
+    }
+
+    body {
+        font-family: 等线,Palatino,Georgia,"Times New Roman",serif;
+    }
+</style> 
