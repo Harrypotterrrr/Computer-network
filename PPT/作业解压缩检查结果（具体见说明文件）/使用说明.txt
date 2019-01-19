@@ -1,0 +1,20 @@
+student.conf       ：学生名单
+tar_one_student.sh ：某个学生某次作业解压测试
+tar_all_student.sh ：全部学生某次作业解压测试
+all.sh             ：检查所有学生的所有作业
+
+
+******-result.txt  ：某次作业的解压测试结果
+******-stu_err_list：某次作业解压出错的学生名单
+
+
+可以将自己的作业文件放入指定目录中进行测试
+
+例：假设 学号：1659999
+              姓名：张三
+              作业文件：linux-makefile.tar.bz2
+              作业编号：000103
+则：Step1：将文件 linux-makefile.tar.bz2 改名为 10106203-1659999-张三-linux-makefile.tar.bz2
+    Step2：将改名后的文件放入 000103目录中
+    Step3：运行 ./tar_one_student.sh 1659999 stu_err_list.txt （*.sh文件要加x属性）
+
